@@ -13,7 +13,9 @@ import (
 	"io"
 	"math/big"
 	"math/rand"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/mohae/csv2md"
 )
@@ -33,6 +35,7 @@ func ResultFromBenchmarkResult(br testing.BenchmarkResult) Result {
 	r.NsOp = br.T.Nanoseconds() / r.Ops
 	r.BytesOp = int64(br.MemBytes) / r.Ops
 	r.AllocsOp = int64(br.MemAllocs) / r.Ops
+	fmt.Printf("%#v\n", r)
 	return r
 }
 
@@ -68,47 +71,20 @@ func (r Result) CSV() []string {
 	return []string{fmt.Sprintf("%d", r.Ops), fmt.Sprintf("%d", r.NsOp), fmt.Sprintf("%d", r.BytesOp), fmt.Sprintf("%d", r.AllocsOp)}
 }
 
-// Bench holds information about a serialization protocol's benchmark.
+// BenchMulti holds information about a benchmark.
 type Bench struct {
-	Name      string            // the name of the bench
-	Keys      []string          // a slice of keys, allows for consistent ordering of output
-	MaxKeyLen int               // the length of the longest key
-	Results   map[string]Result // A map of Result keyed by something.
+	Name   string // the name of the bench
+	Result        // A map of Result keyed by something.
 }
 
 // TXTOutput returns the benchmark information as a slice of strings.
-func (b Bench) TXTOutput() []string {
-	var out []string
-	for _, v := range b.Keys {
-		if len(v) > b.MaxKeyLen {
-			b.MaxKeyLen = len(v)
-		}
-		r, ok := b.Results[v]
-		if !ok {
-			continue
-		}
-		out = append(out, b.formatOutput(v, r))
-	}
-	return out
+func (b Bench) TXTOutput() string {
+	return fmt.Sprintf("%s%s", column(len(b.Name)+4, b.Name), b.Result.String())
 }
 
-func (b Bench) formatOutput(s string, r Result) string {
-	return fmt.Sprintf("%s%s%s", column(len(b.Name)+4, b.Name), column(b.MaxKeyLen, s), r.String())
-}
-
-// CSVOutput returns the benchmark info as [][]string.
-func (b Bench) CSVOutput() [][]string {
-	var out [][]string
-	for _, v := range b.Keys {
-		r, ok := b.Results[v]
-		if !ok {
-			continue
-		}
-		tmp := []string{v}
-		tmp = append(tmp, r.CSV()...)
-		out = append(out, tmp)
-	}
-	return out
+// CSVOutput returns the benchmark info as []string.
+func (b Bench) CSVOutput() []string {
+	return b.Result.CSV()
 }
 
 const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -163,10 +139,8 @@ func column(w int, s string) string {
 // TXTOut writes the benchmark results to the writer as strings.
 func TXTOut(w io.Writer, benchResults []Bench) {
 	for _, v := range benchResults {
-		lines := v.TXTOutput()
-		for _, line := range lines {
-			fmt.Fprintln(w, line)
-		}
+		line := v.TXTOutput()
+		fmt.Fprintln(w, line)
 	}
 }
 
@@ -180,12 +154,10 @@ func CSVOut(w io.Writer, benchResults []Bench) error {
 		return err
 	}
 	for _, bench := range benchResults {
-		lines := bench.CSVOutput()
-		for _, line := range lines {
-			err := wr.Write(line)
-			if err != nil {
-				return err
-			}
+		line := bench.CSVOutput()
+		err := wr.Write(line)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -203,4 +175,23 @@ func MDOut(w io.Writer, benchResults []Bench) error {
 	t := csv2md.NewTransmogrifier(&buff, w)
 	t.SetFieldAlignment([]string{"l", "l", "l", "r", "r", "r", "r"})
 	return t.MDTable()
+}
+
+// Dot prints a . every second to os.StdOut.
+func Dot(done chan struct{}) {
+	var i int
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			i++
+			fmt.Fprint(os.Stderr, ".")
+			if i%60 == 0 {
+				fmt.Fprint(os.Stderr, "\n")
+			}
+		}
+	}
 }
