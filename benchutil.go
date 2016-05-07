@@ -35,7 +35,6 @@ func ResultFromBenchmarkResult(br testing.BenchmarkResult) Result {
 	r.NsOp = br.T.Nanoseconds() / r.Ops
 	r.BytesOp = int64(br.MemBytes) / r.Ops
 	r.AllocsOp = int64(br.MemAllocs) / r.Ops
-	fmt.Printf("%#v\n", r)
 	return r
 }
 
@@ -63,7 +62,7 @@ func (r Result) AllocsOpString() string {
 }
 
 func (r Result) String() string {
-	return fmt.Sprintf("%s%s%s%s", column(15, r.OpsString()), column(15, r.NsOpString()), column(18, r.BytesOpString()), column(16, r.AllocsOpString()))
+	return fmt.Sprintf("%s%s%s%s", columnR(15, r.OpsString()), columnR(15, r.NsOpString()), columnR(18, r.BytesOpString()), columnR(16, r.AllocsOpString()))
 }
 
 // CSV returns the benchmark results as []string.
@@ -78,8 +77,8 @@ type Bench struct {
 }
 
 // TXTOutput returns the benchmark information as a slice of strings.
-func (b Bench) TXTOutput() string {
-	return fmt.Sprintf("%s%s", column(len(b.Name)+4, b.Name), b.Result.String())
+func (b Bench) TXTOutput(l int) string {
+	return fmt.Sprintf("%s%s", columnL(l+4, b.Name), b.Result.String())
 }
 
 // CSVOutput returns the benchmark info as []string.
@@ -123,8 +122,8 @@ func RandBool() bool {
 	return true
 }
 
-// column returns a right justified string of width w.
-func column(w int, s string) string {
+// columnR returns a right justified string of width w.
+func columnR(w int, s string) string {
 	pad := w - len(s)
 	if pad < 0 {
 		pad = 2
@@ -136,10 +135,23 @@ func column(w int, s string) string {
 	return fmt.Sprintf("%s%s", string(padding), s)
 }
 
+// columnL returns a right justified string of width w.
+func columnL(w int, s string) string {
+	pad := w - len(s)
+	if pad < 0 {
+		pad = 2
+	}
+	padding := make([]byte, pad)
+	for i := 0; i < pad; i++ {
+		padding[i] = 0x20
+	}
+	return fmt.Sprintf("%s%s", s, string(padding))
+}
+
 // TXTOut writes the benchmark results to the writer as strings.
-func TXTOut(w io.Writer, benchResults []Bench) {
+func TXTOut(w io.Writer, l int, benchResults []Bench) {
 	for _, v := range benchResults {
-		line := v.TXTOutput()
+		line := v.TXTOutput(l)
 		fmt.Fprintln(w, line)
 	}
 }
