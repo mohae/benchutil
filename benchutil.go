@@ -20,6 +20,163 @@ import (
 	"github.com/mohae/csv2md"
 )
 
+type Benchmarker interface {
+	Add(Bench)
+	Out() error
+}
+
+// Benches is a collection of benchmark informtion and their results.
+type Benches struct {
+	Name       string // Name of the set; optional.
+	Desc       string // Description of the collection of benchmarks; optional.
+	Note       string // Additional notes about the set; optional.
+	Benchmarks []Bench
+	nameLen    int // the length of the longest Bench.Name in the set.
+	descLen    int // the length of the longest Bench.Desc in the set.
+	noteLen    int // the length of the longest Bench.Len in the set.
+}
+
+// Add adds a Bench to the slice of Benchmarks
+func (b *Benches) Add(bench Bench) {
+	b.Benchmarks = append(b.Benchmarks, bench)
+}
+
+func (b *Benches) setLens() {
+	// Sets the max length of each Bench value.
+	for _, v := range b.Benchmarks {
+		if len(v.Name) > b.nameLen {
+			b.nameLen = len(v.Name)
+		}
+		if len(v.Desc) > b.descLen {
+			b.descLen = len(v.Desc)
+		}
+		if len(v.Note) > b.noteLen {
+			b.noteLen = len(v.Note)
+		}
+	}
+}
+
+// StringBench generates string output from the benchmarks.
+type StringBench struct {
+	w io.Writer
+	Benches
+}
+
+func NewStringBench(w io.Writer) *StringBench {
+	return &StringBench{w: w}
+}
+
+// Out writes the benchmark results.
+func (b *StringBench) Out() error {
+	b.setLens()
+	// If this has a name, output that first.
+	if len(b.Name) > 0 {
+		fmt.Fprintln(b.w, b.Name)
+	}
+	// If this has a desc, output that next.
+	if len(b.Desc) > 0 {
+		fmt.Fprintln(b.w, b.Name)
+	}
+	for _, v := range b.Benchmarks {
+		fmt.Fprintln(b.w, v.txt(b.nameLen, b.descLen, b.noteLen))
+	}
+	// If this has a note, output that.
+	if len(b.Desc) > 0 {
+		fmt.Fprintln(b.w, b.Name)
+	}
+	return nil
+}
+
+// CSVBench Benches is a collection of benchmark informtion and their results.
+// The output is written as CSV to the writer.  The Name, Desc, and Note
+// fields are ignored
+type CSVBench struct {
+	Benches
+	w *csv.Writer
+}
+
+func NewCSVBench(w io.Writer) *CSVBench {
+	return &CSVBench{w: csv.NewWriter(w)}
+}
+
+// Out writes the benchmark results to the writer as strings.
+func (b *CSVBench) Out() error {
+	return csvOut(b.w, b.Benches)
+}
+
+// MDBench Benches is a collection of benchmark informtion and their results.
+// The output is written as Markdown to the writer, with the benchmark results
+// formatted as a table.
+type MDBench struct {
+	Benches
+	w io.Writer
+}
+
+func NewMDBench(w io.Writer) *MDBench {
+	return &MDBench{w: w}
+}
+
+// Out writes the benchmark results to the writer as a Markdown Table.
+func (b *MDBench) Out() error {
+	b.setLens()
+	// TODO add MDBench Name, Desc, Note handling
+
+	// Generate the CSV
+	var buff bytes.Buffer // holds the generated CSV
+	w := csv.NewWriter(&buff)
+	err := csvOut(w, b.Benches)
+	if err != nil {
+		return fmt.Errorf("error while creating intermediate CSV: %s", err)
+	}
+	// then transmogrify to MD
+	t := csv2md.NewTransmogrifier(&buff, b.w)
+	t.SetFieldAlignment([]string{"l", "r", "r", "r", "r"})
+	return t.MDTable()
+}
+
+// Bench holds information about a benchmark.
+type Bench struct {
+	Name   string // Name of the bench.
+	Desc   string // Description of the bench; optional.
+	Note   string // Additional note about the bench; optional.
+	Result        // A map of Result keyed by something.
+}
+
+// TXTOutput returns the benchmark information as a slice of strings.
+//
+// The args exist to ensure consistency in the output layout as what is
+// true for this bench may not be true for all benches in the set.
+func (b Bench) txt(nameLen, descLen, noteLen int) string {
+	var s string
+	if nameLen > 0 {
+		s = columnL(nameLen+2, b.Name)
+	}
+	if descLen > 0 {
+		s += columnL(descLen+2, b.Desc)
+	}
+	s += b.Result.String()
+	if noteLen > 0 {
+		s += b.Note
+	}
+	return s
+}
+
+// CSVOutput returns the benchmark info as []string.
+func (b Bench) csv(nameLen, descLen, noteLen int) []string {
+	var s []string
+	if nameLen > 0 {
+		s = append(s, b.Name)
+	}
+	if descLen > 0 {
+		s = append(s, b.Desc)
+	}
+	s = append(s, b.Result.CSV()...)
+	if noteLen > 0 {
+		s = append(s, b.Note)
+	}
+	return s
+}
+
 // Result holds information about a benchmark's results.
 type Result struct {
 	Ops      int64 // the number of operations performed
@@ -68,22 +225,6 @@ func (r Result) String() string {
 // CSV returns the benchmark results as []string.
 func (r Result) CSV() []string {
 	return []string{fmt.Sprintf("%d", r.Ops), fmt.Sprintf("%d", r.NsOp), fmt.Sprintf("%d", r.BytesOp), fmt.Sprintf("%d", r.AllocsOp)}
-}
-
-// BenchMulti holds information about a benchmark.
-type Bench struct {
-	Name   string // the name of the bench
-	Result        // A map of Result keyed by something.
-}
-
-// TXTOutput returns the benchmark information as a slice of strings.
-func (b Bench) TXTOutput(l int) string {
-	return fmt.Sprintf("%s%s", columnL(l+4, b.Name), b.Result.String())
-}
-
-// CSVOutput returns the benchmark info as []string.
-func (b Bench) CSVOutput() []string {
-	return b.Result.CSV()
 }
 
 const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -148,47 +289,6 @@ func columnL(w int, s string) string {
 	return fmt.Sprintf("%s%s", s, string(padding))
 }
 
-// TXTOut writes the benchmark results to the writer as strings.
-func TXTOut(w io.Writer, l int, benchResults []Bench) {
-	for _, v := range benchResults {
-		line := v.TXTOutput(l)
-		fmt.Fprintln(w, line)
-	}
-}
-
-// CSVOut writes the benchmark results to the writer as CSV.
-func CSVOut(w io.Writer, benchResults []Bench) error {
-	wr := csv.NewWriter(w)
-	defer wr.Flush()
-	// first write out the header
-	err := wr.Write([]string{"Protocol", "Operation", "Data Type", "Operations", "Ns/Op", "Bytes/Op", "Allocs/Op"})
-	if err != nil {
-		return err
-	}
-	for _, bench := range benchResults {
-		line := bench.CSVOutput()
-		err := wr.Write(line)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// MDOut writes the benchmark results to the writer as a Markdown Table.
-func MDOut(w io.Writer, benchResults []Bench) error {
-	var buff bytes.Buffer
-	// first generate the csv
-	err := CSVOut(&buff, benchResults)
-	if err != nil {
-		return fmt.Errorf("error while creating intermediate CSV: %s", err)
-	}
-	// then transmogrify to MD
-	t := csv2md.NewTransmogrifier(&buff, w)
-	t.SetFieldAlignment([]string{"l", "l", "l", "r", "r", "r", "r"})
-	return t.MDTable()
-}
-
 // Dot prints a . every second to os.StdOut.
 func Dot(done chan struct{}) {
 	var i int
@@ -206,4 +306,33 @@ func Dot(done chan struct{}) {
 			}
 		}
 	}
+}
+
+// csvOut generates the CSV from a slice of Benches.
+func csvOut(w *csv.Writer, benches Benches) error {
+	defer w.Flush()
+	benches.setLens()
+	var line []string
+	if benches.nameLen > 0 {
+		line = append(line, "Name")
+	}
+	if benches.descLen > 0 {
+		line = append(line, "Description")
+	}
+	line = append(line, []string{"Operations", "Ns/Op", "Bytes/Op", "Allocs/Op"}...)
+	if benches.noteLen > 0 {
+		line = append(line, "Note")
+	}
+	err := w.Write(line)
+	if err != nil {
+		return err
+	}
+	for _, v := range benches.Benchmarks {
+		line = v.csv(benches.nameLen, benches.descLen, benches.noteLen)
+		err := w.Write(line)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
