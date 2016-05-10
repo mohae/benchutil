@@ -36,6 +36,10 @@ type Benches struct {
 	noteLen    int // the length of the longest Bench.Len in the set.
 }
 
+func New(s string) Benches {
+	return Benches{Name: s}
+}
+
 // Add adds a Bench to the slice of Benchmarks
 func (b *Benches) Add(bench Bench) {
 	b.Benchmarks = append(b.Benchmarks, bench)
