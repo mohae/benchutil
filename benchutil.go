@@ -135,7 +135,8 @@ func (b *CSVBench) Out() error {
 // formatted as a table.
 type MDBench struct {
 	Benches
-	w io.Writer
+	w                  io.Writer
+	GroupAsSectionName bool
 }
 
 func NewMDBench(w io.Writer) *MDBench {
@@ -149,7 +150,9 @@ func (b *MDBench) Out() error {
 	// of csv, e.g. [][][]string
 	// build the alignment & header row
 	var hdr, align []string
-	if b.length.Group > 0 {
+	// Don't add a group column if groups aren't used or if the group is used as section name
+	// and output is being split into sections.
+	if b.length.Group > 0 && !b.sectionPerGroup && !b.sectionHeaders && !b.GroupAsSectionName {
 		align = append(align, "l")
 		hdr = append(hdr, "Group")
 	}
@@ -172,12 +175,20 @@ func (b *MDBench) Out() error {
 	t.SetFieldAlignment(align)
 	t.SetFieldNames(hdr)
 	priorGroup := b.Benchmarks[0].Group
+	// SectionName figures out if it should be written
+	err := b.SectionName(priorGroup)
+	if err != nil {
+		return err
+	}
 	for _, v := range b.Benchmarks {
 		if priorGroup != v.Group && b.sectionPerGroup {
 			// if each section doesn't get it's own header row, just add an
 			// empty row instead of creating a new table
 			if !b.sectionHeaders {
-				err := w.Write(empty)
+				if b.GroupAsSectionName {
+					empty[0] = priorGroup
+				}
+				err = w.Write(empty)
 				if err != nil {
 					return err
 				}
@@ -186,7 +197,7 @@ func (b *MDBench) Out() error {
 			}
 			// Get a markdown table transmogrifier and configure
 			w.Flush()
-			err := t.MDTable()
+			err = t.MDTable()
 			if err != nil {
 				return err
 			}
@@ -195,8 +206,17 @@ func (b *MDBench) Out() error {
 				return err
 			}
 			buff.Reset()
+			// SectionName figures out if it should be written
+			err = b.SectionName(v.Group)
+			if err != nil {
+				return err
+			}
 		}
-		err := w.Write(v.csv(b.length))
+		line := v.csv(b.length)
+		if b.sectionPerGroup && b.sectionHeaders && b.GroupAsSectionName {
+			line = line[1:]
+		}
+		err = w.Write(line)
 		if err != nil {
 			return err
 		}
@@ -204,6 +224,21 @@ func (b *MDBench) Out() error {
 	}
 	w.Flush()
 	return t.MDTable()
+}
+
+func (b *MDBench) SectionName(s string) error {
+	// see if SectionName is being used.
+	if !b.GroupAsSectionName || !b.sectionPerGroup || !b.sectionHeaders {
+		return nil
+	}
+	// If output is in sections and Group is being used as section name;
+	// write out the current group
+	_, err := b.w.Write([]byte(s + "  "))
+	if err != nil {
+		return err
+	}
+	_, err = b.w.Write([]byte{'\n'})
+	return err
 }
 
 // Bench holds information about a benchmark.  If there is a value for Group,
