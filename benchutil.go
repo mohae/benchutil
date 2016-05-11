@@ -20,24 +20,28 @@ import (
 	"github.com/mohae/csv2md"
 )
 
+type length struct {
+	Group int // the length of the longest Bench.Group in the set.
+	Name  int // the length of the longest Bench.Name in the set.
+	Desc  int // the length of the longest Bench.Desc in the set.
+	Note  int // the length of the longest Bench.Len in the set.
+}
 type Benchmarker interface {
 	Add(Bench)
 	Out() error
+	SectionPerGroup(bool)
+	SectionHeaders(bool)
 }
 
 // Benches is a collection of benchmark informtion and their results.
 type Benches struct {
-	Name       string // Name of the set; optional.
-	Desc       string // Description of the collection of benchmarks; optional.
-	Note       string // Additional notes about the set; optional.
-	Benchmarks []Bench
-	nameLen    int // the length of the longest Bench.Name in the set.
-	descLen    int // the length of the longest Bench.Desc in the set.
-	noteLen    int // the length of the longest Bench.Len in the set.
-}
-
-func New(s string) Benches {
-	return Benches{Name: s}
+	Name            string // Name of the set; optional.
+	Desc            string // Description of the collection of benchmarks; optional.
+	Note            string // Additional notes about the set; optional.
+	Benchmarks      []Bench
+	sectionPerGroup bool // make a section for each group
+	sectionHeaders  bool // if each section should have it's own col headers, when applicable
+	length
 }
 
 // Add adds a Bench to the slice of Benchmarks
@@ -45,17 +49,30 @@ func (b *Benches) Add(bench Bench) {
 	b.Benchmarks = append(b.Benchmarks, bench)
 }
 
-func (b *Benches) setLens() {
+// Sets the sectionPerGroup bool
+func (b *Benches) SectionPerGroup(v bool) {
+	b.sectionPerGroup = v
+}
+
+// Sets the sectionHeaders bool.  Txt output ignores this.
+func (b *Benches) SectionHeaders(v bool) {
+	b.sectionHeaders = v
+}
+
+func (b *Benches) setLength() {
 	// Sets the max length of each Bench value.
 	for _, v := range b.Benchmarks {
-		if len(v.Name) > b.nameLen {
-			b.nameLen = len(v.Name)
+		if len(v.Group) > b.length.Group {
+			b.length.Group = len(v.Group)
 		}
-		if len(v.Desc) > b.descLen {
-			b.descLen = len(v.Desc)
+		if len(v.Name) > b.length.Name {
+			b.length.Name = len(v.Name)
 		}
-		if len(v.Note) > b.noteLen {
-			b.noteLen = len(v.Note)
+		if len(v.Desc) > b.length.Desc {
+			b.length.Desc = len(v.Desc)
+		}
+		if len(v.Note) > b.length.Note {
+			b.length.Note = len(v.Note)
 		}
 	}
 }
@@ -72,8 +89,7 @@ func NewStringBench(w io.Writer) *StringBench {
 
 // Out writes the benchmark results.
 func (b *StringBench) Out() error {
-	b.setLens()
-	// If this has a name, output that first.
+	b.setLength()
 	if len(b.Name) > 0 {
 		fmt.Fprintln(b.w, b.Name)
 	}
@@ -81,8 +97,14 @@ func (b *StringBench) Out() error {
 	if len(b.Desc) > 0 {
 		fmt.Fprintln(b.w, b.Name)
 	}
+	// set it so that the first section doesn't get an extraneous line break.
+	priorGroup := b.Benchmarks[0].Group
 	for _, v := range b.Benchmarks {
-		fmt.Fprintln(b.w, v.txt(b.nameLen, b.descLen, b.noteLen))
+		if v.Group != priorGroup && b.sectionPerGroup {
+			fmt.Fprintln(b.w, "")
+		}
+		fmt.Fprintln(b.w, v.txt(b.length))
+		priorGroup = v.Group
 	}
 	// If this has a note, output that.
 	if len(b.Desc) > 0 {
@@ -122,60 +144,118 @@ func NewMDBench(w io.Writer) *MDBench {
 
 // Out writes the benchmark results to the writer as a Markdown Table.
 func (b *MDBench) Out() error {
-	b.setLens()
-	// TODO add MDBench Name, Desc, Note handling
-
-	// Generate the CSV
+	b.setLength()
+	// Each section may end up as it's own table so we really have a slice
+	// of csv, e.g. [][][]string
+	// build the alignment & header row
+	var hdr, align []string
+	if b.length.Group > 0 {
+		align = append(align, "l")
+		hdr = append(hdr, "Group")
+	}
+	if b.length.Name > 0 {
+		align = append(align, "l")
+		hdr = append(hdr, "Name")
+	}
+	align = append(align, []string{"r", "r", "r", "r"}...)
+	hdr = append(hdr, []string{"Ops", "ns/Op", "Bytes/Op", "Allocs/Op"}...)
+	if b.length.Note > 0 {
+		align = append(align, "l")
+		hdr = append(hdr, "Note")
+	}
+	empty := make([]string, len(hdr))
+	// get a csv writer
 	var buff bytes.Buffer // holds the generated CSV
 	w := csv.NewWriter(&buff)
-	err := csvOut(w, b.Benches)
-	if err != nil {
-		return fmt.Errorf("error while creating intermediate CSV: %s", err)
-	}
-	// then transmogrify to MD
+	// Generate the CSV:
 	t := csv2md.NewTransmogrifier(&buff, b.w)
-	t.SetFieldAlignment([]string{"l", "r", "r", "r", "r"})
+	t.SetFieldAlignment(align)
+	t.SetFieldNames(hdr)
+	priorGroup := b.Benchmarks[0].Group
+	for _, v := range b.Benchmarks {
+		if priorGroup != v.Group && b.sectionPerGroup {
+			// if each section doesn't get it's own header row, just add an
+			// empty row instead of creating a new table
+			if !b.sectionHeaders {
+				err := w.Write(empty)
+				if err != nil {
+					return err
+				}
+				priorGroup = v.Group
+				continue
+			}
+			// Get a markdown table transmogrifier and configure
+			w.Flush()
+			err := t.MDTable()
+			if err != nil {
+				return err
+			}
+			_, err = b.w.Write([]byte{'\n'})
+			if err != nil {
+				return err
+			}
+			buff.Reset()
+		}
+		err := w.Write(v.csv(b.length))
+		if err != nil {
+			return err
+		}
+		priorGroup = v.Group
+	}
+	w.Flush()
 	return t.MDTable()
 }
 
-// Bench holds information about a benchmark.
+// Bench holds information about a benchmark.  If there is a value for Group,
+// the output will have a break between the groups.
 type Bench struct {
+	Group  string // the Grouping of benchmarks this bench belongs to.
 	Name   string // Name of the bench.
 	Desc   string // Description of the bench; optional.
 	Note   string // Additional note about the bench; optional.
 	Result        // A map of Result keyed by something.
 }
 
+func NewBench(s string) Bench {
+	return Bench{Name: s}
+}
+
 // TXTOutput returns the benchmark information as a slice of strings.
 //
 // The args exist to ensure consistency in the output layout as what is
 // true for this bench may not be true for all benches in the set.
-func (b Bench) txt(nameLen, descLen, noteLen int) string {
+func (b Bench) txt(lens length) string {
 	var s string
-	if nameLen > 0 {
-		s = columnL(nameLen+2, b.Name)
+	if lens.Group > 0 {
+		s = columnL(lens.Group+2, b.Group)
 	}
-	if descLen > 0 {
-		s += columnL(descLen+2, b.Desc)
+	if lens.Name > 0 {
+		s += columnL(lens.Name+2, b.Name)
+	}
+	if lens.Desc > 0 {
+		s += columnL(lens.Desc+2, b.Desc)
 	}
 	s += b.Result.String()
-	if noteLen > 0 {
+	if lens.Note > 0 {
 		s += b.Note
 	}
 	return s
 }
 
 // CSVOutput returns the benchmark info as []string.
-func (b Bench) csv(nameLen, descLen, noteLen int) []string {
+func (b Bench) csv(lens length) []string {
 	var s []string
-	if nameLen > 0 {
+	if lens.Group > 0 {
+		s = append(s, b.Group)
+	}
+	if lens.Name > 0 {
 		s = append(s, b.Name)
 	}
-	if descLen > 0 {
+	if lens.Desc > 0 {
 		s = append(s, b.Desc)
 	}
 	s = append(s, b.Result.CSV()...)
-	if noteLen > 0 {
+	if lens.Note > 0 {
 		s = append(s, b.Note)
 	}
 	return s
@@ -315,28 +395,50 @@ func Dot(done chan struct{}) {
 // csvOut generates the CSV from a slice of Benches.
 func csvOut(w *csv.Writer, benches Benches) error {
 	defer w.Flush()
-	benches.setLens()
-	var line []string
-	if benches.nameLen > 0 {
-		line = append(line, "Name")
+	benches.setLength()
+	var hdr []string
+	if benches.length.Group > 0 {
+		hdr = append(hdr, "Group")
 	}
-	if benches.descLen > 0 {
-		line = append(line, "Description")
+	if benches.length.Name > 0 {
+		hdr = append(hdr, "Name")
 	}
-	line = append(line, []string{"Operations", "Ns/Op", "Bytes/Op", "Allocs/Op"}...)
-	if benches.noteLen > 0 {
-		line = append(line, "Note")
+	if benches.length.Desc > 0 {
+		hdr = append(hdr, "Description")
 	}
-	err := w.Write(line)
+	hdr = append(hdr, []string{"Operations", "Ns/Op", "Bytes/Op", "Allocs/Op"}...)
+	if benches.length.Note > 0 {
+		hdr = append(hdr, "Note")
+	}
+	err := w.Write(hdr)
 	if err != nil {
 		return err
 	}
+	var empty []string
+	// if there are sections, make a slice for the empty line between sections
+	if benches.sectionPerGroup {
+		empty = make([]string, len(hdr))
+	}
+	// set it so that the first section doesn't get an extraneous line break.
+	priorGroup := benches.Benchmarks[0].Group
 	for _, v := range benches.Benchmarks {
-		line = v.csv(benches.nameLen, benches.descLen, benches.noteLen)
-		err := w.Write(line)
+		if v.Group != priorGroup && benches.sectionPerGroup {
+			err := w.Write(empty)
+			if err != nil {
+				return err
+			}
+			if benches.sectionHeaders {
+				err := w.Write(hdr)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		err := w.Write(v.csv(benches.length))
 		if err != nil {
 			return err
 		}
+		priorGroup = v.Group
 	}
 	return nil
 }
