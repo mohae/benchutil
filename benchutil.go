@@ -137,10 +137,11 @@ type MDBench struct {
 	Benches
 	w                  io.Writer
 	GroupAsSectionName bool
+	SectionHeaderHash  string // the markdown header hash for section names, when applicable
 }
 
 func NewMDBench(w io.Writer) *MDBench {
-	return &MDBench{w: w}
+	return &MDBench{w: w, SectionHeaderHash: "####"}
 }
 
 // Out writes the benchmark results to the writer as a Markdown Table.
@@ -232,7 +233,7 @@ func (b *MDBench) SectionName(s string) error {
 	}
 	// If output is in sections and Group is being used as section name;
 	// write out the current group
-	_, err := b.w.Write([]byte(s + "  "))
+	_, err := b.w.Write([]byte(b.SectionHeaderHash + s + "  "))
 	if err != nil {
 		return err
 	}
