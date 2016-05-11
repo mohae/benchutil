@@ -172,6 +172,7 @@ func (b *MDBench) Out() error {
 	w := csv.NewWriter(&buff)
 	// Generate the CSV:
 	t := csv2md.NewTransmogrifier(&buff, b.w)
+	t.HasHeaderRecord = false
 	t.SetFieldAlignment(align)
 	t.SetFieldNames(hdr)
 	priorGroup := b.Benchmarks[0].Group
@@ -192,8 +193,6 @@ func (b *MDBench) Out() error {
 				if err != nil {
 					return err
 				}
-				priorGroup = v.Group
-				continue
 			}
 			// Get a markdown table transmogrifier and configure
 			w.Flush()
