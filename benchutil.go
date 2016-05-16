@@ -23,6 +23,7 @@ import (
 	"github.com/mohae/joefriday/cpu/facts"
 	"github.com/mohae/joefriday/mem"
 	"github.com/mohae/joefriday/platform/kernel"
+	"github.com/mohae/joefriday/platform/release"
 	//"github.com/mohae/joefriday/sysinfo/mem"
 )
 
@@ -63,6 +64,10 @@ func (b *Benches) SystemInfo() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	r, err := release.Get()
+	if err != nil {
+		return "", err
+	}
 	/* TODO value returned by sysinfo is > actual system mem, why?
 	var m mem.Info
 	err = m.Get()
@@ -85,8 +90,20 @@ func (b *Benches) SystemInfo() (string, error) {
 	buff.WriteString("Memory:     ")
 	buff.WriteString(human.Bytes(m.MemTotal))
 	buff.WriteRune('\n')
-	buff.WriteString(fmt.Sprintf("%s%s\n", columnL(12, strings.Title(k.OS)+":"), k.Version))
-	buff.WriteRune('\n')
+	// release info
+	info := r.PrettyName
+	if info == "" {
+		info = r.Version
+		if info == "" {
+			info = r.VersionID
+		}
+	}
+	buff.WriteString(fmt.Sprintf("OS:         %s %s\n", strings.Title(r.ID), info))
+	// kernel info
+	if k.Version != "" {
+		buff.WriteString(fmt.Sprintf("Kernel:     %s\n", k.Version))
+		buff.WriteRune('\n')
+	}
 	return buff.String(), nil
 }
 
