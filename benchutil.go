@@ -14,10 +14,16 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	human "github.com/dustin/go-humanize"
 	"github.com/mohae/csv2md"
+	"github.com/mohae/joefriday/cpu/facts"
+	"github.com/mohae/joefriday/mem"
+	"github.com/mohae/joefriday/platform/kernel"
+	//"github.com/mohae/joefriday/sysinfo/mem"
 )
 
 type length struct {
@@ -26,27 +32,73 @@ type length struct {
 	Desc  int // the length of the longest Bench.Desc in the set.
 	Note  int // the length of the longest Bench.Len in the set.
 }
+
 type Benchmarker interface {
 	Add(Bench)
 	Out() error
+	IncludeSystemInfo(bool)
+	SystemInfo() (string, error)
 	SectionPerGroup(bool)
 	SectionHeaders(bool)
 }
 
 // Benches is a collection of benchmark informtion and their results.
 type Benches struct {
-	Name            string // Name of the set; optional.
-	Desc            string // Description of the collection of benchmarks; optional.
-	Note            string // Additional notes about the set; optional.
-	Benchmarks      []Bench
-	sectionPerGroup bool // make a section for each group
-	sectionHeaders  bool // if each section should have it's own col headers, when applicable
+	Name              string // Name of the set; optional.
+	Desc              string // Description of the collection of benchmarks; optional.
+	Note              string // Additional notes about the set; optional.
+	Benchmarks        []Bench
+	includeSystemInfo bool // Add basic system info to the output
+	sectionPerGroup   bool // make a section for each group
+	sectionHeaders    bool // if each section should have it's own col headers, when applicable
 	length
+}
+
+func (b *Benches) SystemInfo() (string, error) {
+	inf, err := facts.Get()
+	if err != nil {
+		return "", err
+	}
+	k, err := kernel.Get()
+	if err != nil {
+		return "", err
+	}
+	/* TODO value returned by sysinfo is > actual system mem, why?
+	var m mem.Info
+	err = m.Get()
+	*/
+	m, err := mem.Get()
+	if err != nil {
+		return "", err
+	}
+	var buff bytes.Buffer
+	for _, v := range inf.CPU {
+		buff.WriteString(fmt.Sprintf("Processor:  %d\n", v.Processor))
+		buff.WriteString("Model:      ")
+		buff.WriteString(v.ModelName)
+		buff.WriteRune('\n')
+		buff.WriteString(fmt.Sprintf("CPU MHz:    %7.2f\n", v.CPUMHz))
+		buff.WriteString("Cache:      ")
+		buff.WriteString(v.CacheSize)
+		buff.WriteRune('\n')
+	}
+	buff.WriteString("Memory:     ")
+	buff.WriteString(human.Bytes(m.MemTotal))
+	buff.WriteRune('\n')
+	buff.WriteString(fmt.Sprintf("%s%s\n", columnL(12, strings.Title(k.OS)+":"), k.Version))
+	buff.WriteRune('\n')
+	return buff.String(), nil
 }
 
 // Add adds a Bench to the slice of Benchmarks
 func (b *Benches) Add(bench Bench) {
 	b.Benchmarks = append(b.Benchmarks, bench)
+}
+
+// IncludeSystemInfo: if true, basic system info will be included in the
+// benchmarker's output.
+func (b *Benches) IncludeSystemInfo(v bool) {
+	b.includeSystemInfo = v
 }
 
 // Sets the sectionPerGroup bool
@@ -97,6 +149,15 @@ func (b *StringBench) Out() error {
 	if len(b.Desc) > 0 {
 		fmt.Fprintln(b.w, b.Name)
 	}
+	// If systeminfo is included, include it.
+	if b.includeSystemInfo {
+		inf, err := b.SystemInfo()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(b.w, inf)
+	}
+
 	// set it so that the first section doesn't get an extraneous line break.
 	priorGroup := b.Benchmarks[0].Group
 	for _, v := range b.Benchmarks {
@@ -146,6 +207,15 @@ func NewMDBench(w io.Writer) *MDBench {
 
 // Out writes the benchmark results to the writer as a Markdown Table.
 func (b *MDBench) Out() error {
+	// If systeminfo is included, include it.
+	if b.includeSystemInfo {
+		inf, err := b.SystemInfo()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(b.w, inf)
+	}
+
 	b.setLength()
 	// Each section may end up as it's own table so we really have a slice
 	// of csv, e.g. [][][]string
@@ -395,7 +465,7 @@ func columnR(w int, s string) string {
 	return fmt.Sprintf("%s%s", string(padding), s)
 }
 
-// columnL returns a right justified string of width w.
+// columnL returns a left justified string of width w.
 func columnL(w int, s string) string {
 	pad := w - len(s)
 	if pad < 0 {
