@@ -108,8 +108,8 @@ func (b *Benches) SystemInfo() (string, error) {
 }
 
 // Add adds a Bench to the slice of Benchmarks
-func (b *Benches) Add(bench Bench) {
-	b.Benchmarks = append(b.Benchmarks, bench)
+func (b *Benches) Append(benches ...Bench) {
+	b.Benchmarks = append(b.Benchmarks, benches...)
 }
 
 // IncludeSystemInfo: if true, basic system info will be included in the

@@ -18,3 +18,17 @@ func TestSystemInfo(t *testing.T) {
 	}
 	t.Logf(s)
 }
+
+func TestAppend(t *testing.T) {
+	b := Benches{}
+	bench := Bench{}
+	b.Append(bench)
+	if len(b.Benchmarks) != 1 {
+		t.Errorf("expected Benchmarks len to be 1; got %d", len(b.Benchmarks))
+	}
+	benches := []Bench{Bench{}, Bench{}}
+	b.Append(benches...)
+	if len(b.Benchmarks) != 3 {
+		t.Errorf("expected Benchmarks len to be 3; got %d", len(b.Benchmarks))
+	}
+}
