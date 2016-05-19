@@ -35,7 +35,7 @@ type length struct {
 }
 
 type Benchmarker interface {
-	Add(Bench)
+	Append(...Bench)
 	Out() error
 	IncludeSystemInfo(bool)
 	SystemInfo() (string, error)
