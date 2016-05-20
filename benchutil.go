@@ -331,15 +331,16 @@ func (b *MDBench) SectionName(s string) error {
 // Bench holds information about a benchmark.  If there is a value for Group,
 // the output will have a break between the groups.
 type Bench struct {
-	Group  string // the Grouping of benchmarks this bench belongs to.
-	Name   string // Name of the bench.
-	Desc   string // Description of the bench; optional.
-	Note   string // Additional note about the bench; optional.
-	Result        // A map of Result keyed by something.
+	Group      string // the Grouping of benchmarks this bench belongs to.
+	Name       string // Name of the bench.
+	Desc       string // Description of the bench; optional.
+	Note       string // Additional note about the bench; optional.
+	Iterations int    // number of test iterations; default 1
+	Result            // A map of Result keyed by something.
 }
 
 func NewBench(s string) Bench {
-	return Bench{Name: s}
+	return Bench{Name: s, Iterations: 1}
 }
 
 // TXTOutput returns the benchmark information as a slice of strings.
@@ -357,7 +358,7 @@ func (b Bench) txt(lens length) string {
 	if lens.Desc > 0 {
 		s += columnL(lens.Desc+2, b.Desc)
 	}
-	s += b.Result.String()
+	s += b.String()
 	if lens.Note > 0 {
 		s += b.Note
 	}
@@ -376,11 +377,43 @@ func (b Bench) csv(lens length) []string {
 	if lens.Desc > 0 {
 		s = append(s, b.Desc)
 	}
-	s = append(s, b.Result.CSV()...)
+	s = append(s, b.CSV()...)
 	if lens.Note > 0 {
 		s = append(s, b.Note)
 	}
 	return s
+}
+
+// OpsString returns the operations performed by the benchmark as a formatted
+// string.
+func (b Bench) OpsString() string {
+	return fmt.Sprintf("%d ops", b.Ops*int64(b.Iterations))
+}
+
+// NsOpString returns the nanoseconds each operation took as a formatted
+// string.
+func (b Bench) NsOpString() string {
+	return fmt.Sprintf("%d ns/Op", b.NsOp/int64(b.Iterations))
+}
+
+// BytesOpString returns the bytes allocated for each operation as a formatted
+// string.
+func (b Bench) BytesOpString() string {
+	return fmt.Sprintf("%d bytes/Op", b.BytesOp/int64(b.Iterations))
+}
+
+// AllocsOpString returns the allocations per operation as a formatted string.
+func (b Bench) AllocsOpString() string {
+	return fmt.Sprintf("%d allocs/Op", b.AllocsOp/int64(b.Iterations))
+}
+
+func (b Bench) String() string {
+	return fmt.Sprintf("%s%s%s%s", columnR(15, b.OpsString()), columnR(15, b.NsOpString()), columnR(18, b.BytesOpString()), columnR(16, b.AllocsOpString()))
+}
+
+// CSV returns the benchmark results as []string.
+func (b Bench) CSV() []string {
+	return []string{b.NsOpString(), b.BytesOpString(), b.AllocsOpString()}
 }
 
 // Result holds information about a benchmark's results.
@@ -399,38 +432,6 @@ func ResultFromBenchmarkResult(br testing.BenchmarkResult) Result {
 	r.BytesOp = int64(br.MemBytes) / r.Ops
 	r.AllocsOp = int64(br.MemAllocs) / r.Ops
 	return r
-}
-
-// OpsString returns the operations performed by the benchmark as a formatted
-// string.
-func (r Result) OpsString() string {
-	return fmt.Sprintf("%d ops", r.Ops)
-}
-
-// NsOpString returns the nanoseconds each operation took as a formatted
-// string.
-func (r Result) NsOpString() string {
-	return fmt.Sprintf("%d ns/Op", r.NsOp)
-}
-
-// BytesOpString returns the bytes allocated for each operation as a formatted
-// string.
-func (r Result) BytesOpString() string {
-	return fmt.Sprintf("%d bytes/Op", r.BytesOp)
-}
-
-// AllocsOpString returns the allocations per operation as a formatted string.
-func (r Result) AllocsOpString() string {
-	return fmt.Sprintf("%d allocs/Op", r.AllocsOp)
-}
-
-func (r Result) String() string {
-	return fmt.Sprintf("%s%s%s%s", columnR(15, r.OpsString()), columnR(15, r.NsOpString()), columnR(18, r.BytesOpString()), columnR(16, r.AllocsOpString()))
-}
-
-// CSV returns the benchmark results as []string.
-func (r Result) CSV() []string {
-	return []string{fmt.Sprintf("%d", r.Ops), fmt.Sprintf("%d", r.NsOp), fmt.Sprintf("%d", r.BytesOp), fmt.Sprintf("%d", r.AllocsOp)}
 }
 
 const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
