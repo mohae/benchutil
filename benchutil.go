@@ -27,13 +27,6 @@ import (
 	//"github.com/mohae/joefriday/sysinfo/mem"
 )
 
-type length struct {
-	Group int // the length of the longest Bench.Group in the set.
-	Name  int // the length of the longest Bench.Name in the set.
-	Desc  int // the length of the longest Bench.Desc in the set.
-	Note  int // the length of the longest Bench.Len in the set.
-}
-
 type Benchmarker interface {
 	Append(...Bench)
 	Out() error
@@ -133,6 +126,9 @@ func (b *Benches) setLength() {
 	for _, v := range b.Benchmarks {
 		if len(v.Group) > b.length.Group {
 			b.length.Group = len(v.Group)
+		}
+		if len(v.SubGroup) > b.length.SubGroup {
+			b.length.SubGroup = len(v.SubGroup)
 		}
 		if len(v.Name) > b.length.Name {
 			b.length.Name = len(v.Name)
@@ -244,6 +240,10 @@ func (b *MDBench) Out() error {
 		align = append(align, "l")
 		hdr = append(hdr, "Group")
 	}
+	if b.length.SubGroup > 0 {
+		align = append(align, "l")
+		hdr = append(hdr, "SubGroup")
+	}
 	if b.length.Name > 0 {
 		align = append(align, "l")
 		hdr = append(hdr, "Name")
@@ -328,10 +328,19 @@ func (b *MDBench) SectionName(s string) error {
 	return err
 }
 
+type length struct {
+	Group    int // the length of the longest Bench.Group in the set
+	SubGroup int // the length of the longest Bench.Subgroup in the set.
+	Name     int // the length of the longest Bench.Name in the set.
+	Desc     int // the length of the longest Bench.Desc in the set.
+	Note     int // the length of the longest Bench.Len in the set.
+}
+
 // Bench holds information about a benchmark.  If there is a value for Group,
 // the output will have a break between the groups.
 type Bench struct {
 	Group      string // the Grouping of benchmarks this bench belongs to.
+	SubGroup   string // the Sub-Group this bench belongs to; mainly for additional sort options.
 	Name       string // Name of the bench.
 	Desc       string // Description of the bench; optional.
 	Note       string // Additional note about the bench; optional.
@@ -352,6 +361,9 @@ func (b Bench) txt(lens length) string {
 	if lens.Group > 0 {
 		s = columnL(lens.Group+2, b.Group)
 	}
+	if lens.SubGroup > 0 {
+		s += columnL(lens.SubGroup+2, b.SubGroup)
+	}
 	if lens.Name > 0 {
 		s += columnL(lens.Name+2, b.Name)
 	}
@@ -370,6 +382,9 @@ func (b Bench) csv(lens length) []string {
 	var s []string
 	if lens.Group > 0 {
 		s = append(s, b.Group)
+	}
+	if lens.SubGroup > 0 {
+		s = append(s, b.SubGroup)
 	}
 	if lens.Name > 0 {
 		s = append(s, b.Name)
@@ -522,6 +537,9 @@ func csvOut(w *csv.Writer, benches Benches) error {
 	var hdr []string
 	if benches.length.Group > 0 {
 		hdr = append(hdr, "Group")
+	}
+	if benches.length.SubGroup > 0 {
+		hdr = append(hdr, "SubGroup")
 	}
 	if benches.length.Name > 0 {
 		hdr = append(hdr, "Name")
