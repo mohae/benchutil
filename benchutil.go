@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	pcg "github.com/dgryski/go-pcgr"
 	human "github.com/dustin/go-humanize"
 	"github.com/mohae/csv2md"
 	"github.com/mohae/joefriday/cpu/facts"
@@ -26,6 +27,12 @@ import (
 	"github.com/mohae/joefriday/platform/release"
 	//"github.com/mohae/joefriday/sysinfo/mem"
 )
+
+var Rand pcg.Rand
+
+func init() {
+	Rand.Seed(SeedVal())
+}
 
 type Benchmarker interface {
 	Append(...Bench)
@@ -451,6 +458,8 @@ func ResultFromBenchmarkResult(br testing.BenchmarkResult) Result {
 
 const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+var alen = uint32(len(alphanum))
+
 // SeedVal gets a random int64 to use for a seed value
 func SeedVal() int64 {
 	bi := big.NewInt(1<<63 - 1)
@@ -462,17 +471,17 @@ func SeedVal() int64 {
 }
 
 // RandString returns a randomly generated string of length l.
-func RandString(l int) string {
+func RandString(l uint32) string {
 	return string(RandBytes(l))
 }
 
 // RandBytes returns a randomly generated []byte of length l.  The values of
 // these bytes are restricted to the ASCII alphanum range; that doesn't matter
 // for the purposes of these benchmarks.
-func RandBytes(l int) []byte {
+func RandBytes(l uint32) []byte {
 	b := make([]byte, l)
-	for i := 0; i < l; i++ {
-		b[i] = alphanum[rand.Intn(len(alphanum))]
+	for i := 0; i < int(l); i++ {
+		b[i] = alphanum[int(Rand.Bound(alen))]
 	}
 	return b
 }
