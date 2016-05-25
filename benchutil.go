@@ -31,7 +31,7 @@ import (
 var Rand pcg.Rand
 
 func init() {
-	Rand.Seed(SeedVal())
+	Rand.Seed(Seed())
 }
 
 type Benchmarker interface {
@@ -460,8 +460,8 @@ const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
 
 var alen = uint32(len(alphanum))
 
-// SeedVal gets a random int64 to use for a seed value
-func SeedVal() int64 {
+// Seed gets a random int64 to use for a seed value
+func Seed() int64 {
 	bi := big.NewInt(1<<63 - 1)
 	r, err := crand.Int(crand.Reader, bi)
 	if err != nil {
