@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,8 @@ import (
 	//"github.com/mohae/joefriday/sysinfo/mem"
 )
 
+const defaultPadding = 2
+
 var Rand pcg.Rand
 
 func init() {
@@ -37,21 +40,97 @@ func init() {
 type Benchmarker interface {
 	Append(...Bench)
 	Out() error
+	IncludeOpsColumnDesc(bool)
 	IncludeSystemInfo(bool)
 	SystemInfo() (string, error)
+	SetGroupColumnHeader(s string)
+	SetSubGroupColumnHeader(s string)
+	SetNameColumnHeader(s string)
+	SetDescColumnHeader(s string)
+	SetOpsColumnHeader(s string)
+	SetNsOpColumnHeader(s string)
+	SetBytesOpColumnHeader(s string)
+	SetAllocsOpColumnHeader(s string)
+	SetNoteColumnHeader(s string)
+	SetColumnPadding(i int)
 	SectionPerGroup(bool)
 	SectionHeaders(bool)
 }
 
+type header struct {
+	Group    string
+	SubGroup string
+	Name     string
+	Desc     string
+	Ops      string
+	NsOp     string
+	BytesOp  string
+	AllocsOp string
+	Note     string
+}
+
+func newHeader() header {
+	return header{
+		Group:    "group",
+		SubGroup: "sub-group",
+		Name:     "name",
+		Desc:     "desc",
+		Ops:      "ops",
+		NsOp:     "ns/op",
+		BytesOp:  "b/op",
+		AllocsOp: "allocs/op",
+		Note:     "note",
+	}
+}
+
+func (h *header) SetGroupColumnHeader(s string) {
+	h.Group = s
+}
+
+func (h *header) SetSubGroupColumnHeader(s string) {
+	h.SubGroup = s
+}
+
+func (h *header) SetNameColumnHeader(s string) {
+	h.Name = s
+}
+
+func (h *header) SetDescColumnHeader(s string) {
+	h.Desc = s
+}
+
+func (h *header) SetOpsColumnHeader(s string) {
+	h.Ops = s
+}
+
+func (h *header) SetNsOpColumnHeader(s string) {
+	h.NsOp = s
+}
+
+func (h *header) SetBytesOpColumnHeader(s string) {
+	h.BytesOp = s
+}
+
+func (h *header) SetAllocsOpColumnHeader(s string) {
+	h.AllocsOp = s
+}
+
+func (h *header) SetNoteColumnHeader(s string) {
+	h.Note = s
+}
+
 // Benches is a collection of benchmark informtion and their results.
 type Benches struct {
-	Name              string // Name of the set; optional.
-	Desc              string // Description of the collection of benchmarks; optional.
-	Note              string // Additional notes about the set; optional.
-	Benchmarks        []Bench
-	includeSystemInfo bool // Add basic system info to the output
-	sectionPerGroup   bool // make a section for each group
-	sectionHeaders    bool // if each section should have it's own col headers, when applicable
+	Name       string // Name of the set; optional.
+	Desc       string // Description of the collection of benchmarks; optional.
+	Note       string // Additional notes about the set; optional.
+	Benchmarks []Bench
+	header
+	columnPadding        int  // The number of spaces between columns.
+	includeOpsColumnDesc bool // Include the description of the ops info in each column's result output.
+	includeSystemInfo    bool // Add basic system info to the output
+	sectionPerGroup      bool // make a section for each group
+	sectionHeaders       bool // if each section should have it's own col headers, when applicable
 	length
 }
 
@@ -112,6 +191,12 @@ func (b *Benches) Append(benches ...Bench) {
 	b.Benchmarks = append(b.Benchmarks, benches...)
 }
 
+// IncludeOpsColumnDesc: if true, the ops information will be included in each
+// ops column's result.
+func (b *Benches) IncludeOpsColumnDesc(v bool) {
+	b.includeOpsColumnDesc = v
+}
+
 // IncludeSystemInfo: if true, basic system info will be included in the
 // benchmarker's output.
 func (b *Benches) IncludeSystemInfo(v bool) {
@@ -128,8 +213,15 @@ func (b *Benches) SectionHeaders(v bool) {
 	b.sectionHeaders = v
 }
 
+// Sets the number of spaces between columns; default is 2.
+func (b *Benches) SetColumnPadding(i int) {
+	b.columnPadding = i
+}
+
 func (b *Benches) setLength() {
 	// Sets the max length of each Bench value.
+	var maxIters int64
+	// find the longest value in all of the benchmarks
 	for _, v := range b.Benchmarks {
 		if len(v.Group) > b.length.Group {
 			b.length.Group = len(v.Group)
@@ -146,7 +238,161 @@ func (b *Benches) setLength() {
 		if len(v.Note) > b.length.Note {
 			b.length.Note = len(v.Note)
 		}
+		// result
+		if len(strconv.Itoa(int(v.Result.Ops))) > b.length.Ops {
+			b.length.Ops = len(strconv.Itoa(int(v.Result.Ops)))
+		}
+		// if each result represents more than 1 iteration; store the
+		// benches value if it's greater than the current value.
+		if (v.Result.Ops * int64(v.Iterations)) > maxIters {
+			maxIters = v.Result.Ops * int64(v.Iterations)
+		}
+		if len(strconv.Itoa(int(v.Result.NsOp))) > b.length.NsOp {
+			b.length.NsOp = len(strconv.Itoa(int(v.Result.NsOp)))
+		}
+		if len(strconv.Itoa(int(v.Result.BytesOp))) > b.length.BytesOp {
+			b.length.BytesOp = len(strconv.Itoa(int(v.Result.BytesOp)))
+		}
+		if len(strconv.Itoa(int(v.Result.AllocsOp))) > b.length.AllocsOp {
+			b.length.AllocsOp = len(strconv.Itoa(int(v.Result.AllocsOp)))
+		}
 	}
+	// if the ops desc is going to be included in each ops row/column; add that length
+	if b.includeOpsColumnDesc {
+		b.length.NsOp += 6
+		b.length.BytesOp += 9
+		b.length.AllocsOp += 10
+	}
+	// see if the header column values are > than the contents they hold
+	if b.length.Group > 0 && len(b.header.Group) > b.length.Group {
+		b.length.Group = len(b.header.Group)
+	}
+	if b.length.SubGroup > 0 && len(b.header.SubGroup) > b.length.SubGroup {
+		b.length.SubGroup = len(b.header.SubGroup)
+	}
+	if b.length.Name > 0 && len(b.header.Name) > b.length.Name {
+		b.length.Name = len(b.header.Name)
+	}
+	if b.length.Desc > 0 && len(b.header.Desc) > b.length.Desc {
+		b.length.Desc = len(b.header.Desc)
+	}
+	if b.length.Note > 0 && len(b.header.Note) > b.length.Note {
+		b.length.Note = len(b.header.Note)
+	}
+	if len(b.header.Ops) > b.length.Ops {
+		b.length.Ops = len(b.header.Ops)
+	}
+	if len(b.header.NsOp) > b.length.NsOp {
+		b.length.NsOp = len(b.header.NsOp)
+	}
+	if len(b.header.BytesOp) > b.length.BytesOp {
+		b.length.BytesOp = len(b.header.BytesOp)
+	}
+	if len(b.header.AllocsOp) > b.length.AllocsOp {
+		b.length.AllocsOp = len(b.header.AllocsOp)
+	}
+}
+
+// OpsString returns the operations performed by the benchmark as a formatted
+// string.
+func (b *Benches) OpsString(v Bench) string {
+	if b.includeOpsColumnDesc {
+		return fmt.Sprintf("%s ops", b.perOpsString(v.Ops, v.Iterations))
+	}
+	return b.perOpsString(v.Ops, v.Iterations)
+}
+
+// NsOpString returns the nanoseconds each operation took as a formatted
+// string.
+func (b *Benches) NsOpString(v Bench) string {
+	if b.includeOpsColumnDesc {
+		return fmt.Sprintf("%s ns/op", b.perOpsString(v.NsOp, v.Iterations))
+	}
+	return b.perOpsString(v.NsOp, v.Iterations)
+}
+
+// BytesOpString returns the bytes allocated for each operation as a formatted
+// string.
+func (b *Benches) BytesOpString(v Bench) string {
+	if b.includeOpsColumnDesc {
+		return fmt.Sprintf("%s bytes/op", b.perOpsString(v.BytesOp, v.Iterations))
+	}
+	return b.perOpsString(v.BytesOp, v.Iterations)
+}
+
+// AllocsOpString returns the allocations per operation as a formatted string.
+func (b *Benches) AllocsOpString(v Bench) string {
+	if b.includeOpsColumnDesc {
+		return fmt.Sprintf("%s allocs/op", b.perOpsString(v.AllocsOp, v.Iterations))
+	}
+	return b.perOpsString(v.AllocsOp, v.Iterations)
+}
+
+// perOpsString takes a value and uses it to calculate the per operation value,
+// which is returned as a string.
+func (b *Benches) perOpsString(v int64, it int) string {
+	if v == 0 {
+		return "0"
+	}
+	return strconv.FormatInt(v/int64(it), 10)
+}
+
+// columnR returns a right justified string of width w.
+func (b *Benches) columnR(w int, s string) string {
+	pad := w - len(s)
+	if pad < 0 {
+		pad = 0
+	}
+	rpadding := make([]byte, pad)
+	for i := range rpadding {
+		rpadding[i] = 0x20
+	}
+	lpadding := make([]byte, b.columnPadding)
+	for i := range lpadding {
+		lpadding[i] = 0x20
+	}
+	return fmt.Sprintf("%s%s%s", rpadding, s, lpadding)
+}
+
+// columnL returns a left justified string of width w.
+func (b *Benches) columnL(w int, s string) string {
+	pad := w + b.columnPadding - len(s)
+	if pad < 0 {
+		pad = b.columnPadding
+	}
+	padding := make([]byte, pad)
+	for i := range padding {
+		padding[i] = 0x20
+	}
+	return fmt.Sprintf("%s%s", s, padding)
+}
+
+// resultCSV returns the benchmark results as []string.
+func (b *Benches) resultCSV(i int) []string {
+	return []string{b.OpsString(b.Benchmarks[i]), b.NsOpString(b.Benchmarks[i]), b.BytesOpString(b.Benchmarks[i]), b.AllocsOpString(b.Benchmarks[i])}
+}
+
+// csv returns the info of the benchmark at index i as []string.
+func (b Benches) csv(i int) []string {
+	var s []string
+	if b.length.Group > 0 {
+		s = append(s, b.Benchmarks[i].Group)
+	}
+	if b.length.SubGroup > 0 {
+		s = append(s, b.Benchmarks[i].SubGroup)
+	}
+	if b.length.Name > 0 {
+		s = append(s, b.Benchmarks[i].Name)
+	}
+	if b.length.Desc > 0 {
+		s = append(s, b.Benchmarks[i].Desc)
+	}
+	fmt.Println(b.resultCSV(i))
+	s = append(s, b.resultCSV(i)...)
+	if b.length.Note > 0 {
+		s = append(s, b.Benchmarks[i].Note)
+	}
+	return s
 }
 
 // StringBench generates string output from the benchmarks.
@@ -156,7 +402,13 @@ type StringBench struct {
 }
 
 func NewStringBench(w io.Writer) *StringBench {
-	return &StringBench{w: w}
+	return &StringBench{
+		w: w,
+		Benches: Benches{
+			header:        newHeader(),
+			columnPadding: defaultPadding,
+		},
+	}
 }
 
 // Out writes the benchmark results.
@@ -178,20 +430,107 @@ func (b *StringBench) Out() error {
 		fmt.Fprintln(b.w, inf)
 	}
 
+	// Write the headers
+	b.WriteHeader()
+	// Write the separator line
+	b.WriteSeparatorLine()
 	// set it so that the first section doesn't get an extraneous line break.
-	priorGroup := b.Benchmarks[0].Group
-	for _, v := range b.Benchmarks {
-		if v.Group != priorGroup && b.sectionPerGroup {
-			fmt.Fprintln(b.w, "")
-		}
-		fmt.Fprintln(b.w, v.txt(b.length))
-		priorGroup = v.Group
-	}
+	b.WriteResults()
 	// If this has a note, output that.
 	if len(b.Desc) > 0 {
 		fmt.Fprintln(b.w, b.Name)
 	}
 	return nil
+}
+
+func (b *StringBench) WriteHeader() {
+	var buf bytes.Buffer
+	if b.length.Group > 0 {
+		buf.WriteString(b.columnL(b.length.Group, b.header.Group))
+	}
+	if b.length.SubGroup > 0 {
+		buf.WriteString(b.columnL(b.length.SubGroup, b.header.SubGroup))
+	}
+	if b.length.Name > 0 {
+		buf.WriteString(b.columnL(b.length.Name, b.header.Name))
+	}
+	if b.length.Desc > 0 {
+		buf.WriteString(b.columnL(b.length.Desc, b.header.Desc))
+	}
+	buf.WriteString(b.columnL(b.length.Ops, b.header.Ops))
+	buf.WriteString(b.columnL(b.length.NsOp, b.header.NsOp))
+	buf.WriteString(b.columnL(b.length.BytesOp, b.header.BytesOp))
+	buf.WriteString(b.columnL(b.length.AllocsOp, b.header.AllocsOp))
+	if b.length.Note > 0 {
+		buf.WriteString(b.header.Note)
+	}
+	fmt.Fprintln(b.w, buf.String())
+}
+
+func (b *StringBench) WriteSeparatorLine() {
+	var buf bytes.Buffer
+	var l int
+	if b.length.Group > 0 {
+		l = b.length.Group + b.columnPadding
+	}
+	if b.length.SubGroup > 0 {
+		l += b.length.SubGroup + b.columnPadding
+	}
+	if b.length.Name > 0 {
+		l += b.length.Name + b.columnPadding
+	}
+	if b.length.Desc > 0 {
+		l += b.length.Desc + b.columnPadding
+	}
+	l += b.length.Ops + b.columnPadding
+	l += b.length.NsOp + b.columnPadding
+	l += b.length.BytesOp + b.columnPadding
+	l += b.length.AllocsOp + b.columnPadding
+	l += b.length.Note
+	for i := 0; i < l; i++ {
+		buf.WriteByte('-')
+	}
+	//buf.WriteRune('\n')
+	fmt.Fprintln(b.w, buf.String())
+}
+
+// WriteResults returns the benchmark information as a slice of strings.
+//
+// The args exist to ensure consistency in the output layout as what is
+// true for this bench may not be true for all benches in the set.
+func (b *StringBench) WriteResults() {
+	var buf bytes.Buffer
+	priorGroup := b.Benchmarks[0].Group
+	for i, bench := range b.Benchmarks {
+		buf.Reset()
+
+		if b.sectionPerGroup && bench.Group != priorGroup {
+			buf.WriteRune('\n')
+		}
+		priorGroup = bench.Group
+
+		if b.length.Group > 0 {
+			buf.WriteString(b.columnL(b.length.Group, bench.Group))
+		}
+		if b.length.SubGroup > 0 {
+			buf.WriteString(b.columnL(b.length.SubGroup, bench.SubGroup))
+		}
+		if b.length.Name > 0 {
+			buf.WriteString(b.columnL(b.length.Name, bench.Name))
+		}
+		if b.length.Desc > 0 {
+			buf.WriteString(b.columnL(b.length.Desc, b.Desc))
+		}
+		buf.WriteString(b.BenchString(i))
+		if b.length.Note > 0 {
+			buf.WriteString(b.Note)
+		}
+		fmt.Fprintln(b.w, buf.String())
+	}
+}
+
+func (b *StringBench) BenchString(i int) string {
+	return fmt.Sprintf("%s%s%s%s", b.columnR(b.length.Ops, b.OpsString(b.Benchmarks[i])), b.columnR(b.length.NsOp, b.NsOpString(b.Benchmarks[i])), b.columnR(b.length.BytesOp, b.BytesOpString(b.Benchmarks[i])), b.columnR(b.length.AllocsOp, b.AllocsOpString(b.Benchmarks[i])))
 }
 
 // CSVBench Benches is a collection of benchmark informtion and their results.
@@ -203,7 +542,13 @@ type CSVBench struct {
 }
 
 func NewCSVBench(w io.Writer) *CSVBench {
-	return &CSVBench{w: csv.NewWriter(w)}
+	return &CSVBench{
+		w: csv.NewWriter(w),
+		Benches: Benches{
+			header:        newHeader(),
+			columnPadding: defaultPadding,
+		},
+	}
 }
 
 // Out writes the benchmark results to the writer as strings.
@@ -222,7 +567,14 @@ type MDBench struct {
 }
 
 func NewMDBench(w io.Writer) *MDBench {
-	return &MDBench{w: w, SectionHeaderHash: "####"}
+	return &MDBench{
+		w: w,
+		Benches: Benches{
+			header:        newHeader(),
+			columnPadding: defaultPadding,
+		},
+		SectionHeaderHash: "####",
+	}
 }
 
 // Out writes the benchmark results to the writer as a Markdown Table.
@@ -245,21 +597,25 @@ func (b *MDBench) Out() error {
 	// and output is being split into sections.
 	if b.length.Group > 0 && !b.sectionPerGroup && !b.sectionHeaders && !b.GroupAsSectionName {
 		align = append(align, "l")
-		hdr = append(hdr, "Group")
+		hdr = append(hdr, b.header.Group)
 	}
 	if b.length.SubGroup > 0 {
 		align = append(align, "l")
-		hdr = append(hdr, "SubGroup")
+		hdr = append(hdr, b.header.SubGroup)
 	}
 	if b.length.Name > 0 {
 		align = append(align, "l")
-		hdr = append(hdr, "Name")
+		hdr = append(hdr, b.header.Name)
+	}
+	if b.length.Desc > 0 {
+		align = append(align, "l")
+		hdr = append(hdr, b.header.Desc)
 	}
 	align = append(align, []string{"r", "r", "r", "r"}...)
-	hdr = append(hdr, []string{"Ops", "ns/Op", "Bytes/Op", "Allocs/Op"}...)
+	hdr = append(hdr, []string{b.header.Ops, b.header.NsOp, b.header.BytesOp, b.header.AllocsOp}...)
 	if b.length.Note > 0 {
 		align = append(align, "l")
-		hdr = append(hdr, "Note")
+		hdr = append(hdr, b.header.Note)
 	}
 	empty := make([]string, len(hdr))
 	// get a csv writer
@@ -276,7 +632,7 @@ func (b *MDBench) Out() error {
 	if err != nil {
 		return err
 	}
-	for _, v := range b.Benchmarks {
+	for i, v := range b.Benchmarks {
 		if priorGroup != v.Group && b.sectionPerGroup {
 			// if each section doesn't get it's own header row, just add an
 			// empty row instead of creating a new table
@@ -306,7 +662,7 @@ func (b *MDBench) Out() error {
 				return err
 			}
 		}
-		line := v.csv(b.length)
+		line := b.csv(i)
 		if b.sectionPerGroup && b.sectionHeaders && b.GroupAsSectionName {
 			line = line[1:]
 		}
@@ -340,6 +696,10 @@ type length struct {
 	SubGroup int // the length of the longest Bench.Subgroup in the set.
 	Name     int // the length of the longest Bench.Name in the set.
 	Desc     int // the length of the longest Bench.Desc in the set.
+	Ops      int // width of highest ops count in the set.
+	NsOp     int // width of the largest ns/op in the set.
+	BytesOp  int // width of the largest bytes/op alloc in the set.
+	AllocsOp int // width of the largest allocs/op in the set.
 	Note     int // the length of the longest Bench.Len in the set.
 }
 
@@ -357,85 +717,6 @@ type Bench struct {
 
 func NewBench(s string) Bench {
 	return Bench{Name: s, Iterations: 1}
-}
-
-// TXTOutput returns the benchmark information as a slice of strings.
-//
-// The args exist to ensure consistency in the output layout as what is
-// true for this bench may not be true for all benches in the set.
-func (b Bench) txt(lens length) string {
-	var s string
-	if lens.Group > 0 {
-		s = columnL(lens.Group+2, b.Group)
-	}
-	if lens.SubGroup > 0 {
-		s += columnL(lens.SubGroup+2, b.SubGroup)
-	}
-	if lens.Name > 0 {
-		s += columnL(lens.Name+2, b.Name)
-	}
-	if lens.Desc > 0 {
-		s += columnL(lens.Desc+2, b.Desc)
-	}
-	s += b.String()
-	if lens.Note > 0 {
-		s += b.Note
-	}
-	return s
-}
-
-// CSVOutput returns the benchmark info as []string.
-func (b Bench) csv(lens length) []string {
-	var s []string
-	if lens.Group > 0 {
-		s = append(s, b.Group)
-	}
-	if lens.SubGroup > 0 {
-		s = append(s, b.SubGroup)
-	}
-	if lens.Name > 0 {
-		s = append(s, b.Name)
-	}
-	if lens.Desc > 0 {
-		s = append(s, b.Desc)
-	}
-	s = append(s, b.CSV()...)
-	if lens.Note > 0 {
-		s = append(s, b.Note)
-	}
-	return s
-}
-
-// OpsString returns the operations performed by the benchmark as a formatted
-// string.
-func (b Bench) OpsString() string {
-	return fmt.Sprintf("%d ops", b.Ops*int64(b.Iterations))
-}
-
-// NsOpString returns the nanoseconds each operation took as a formatted
-// string.
-func (b Bench) NsOpString() string {
-	return fmt.Sprintf("%d ns/Op", b.NsOp/int64(b.Iterations))
-}
-
-// BytesOpString returns the bytes allocated for each operation as a formatted
-// string.
-func (b Bench) BytesOpString() string {
-	return fmt.Sprintf("%d bytes/Op", b.BytesOp/int64(b.Iterations))
-}
-
-// AllocsOpString returns the allocations per operation as a formatted string.
-func (b Bench) AllocsOpString() string {
-	return fmt.Sprintf("%d allocs/Op", b.AllocsOp/int64(b.Iterations))
-}
-
-func (b Bench) String() string {
-	return fmt.Sprintf("%s%s%s%s", columnR(15, b.OpsString()), columnR(15, b.NsOpString()), columnR(18, b.BytesOpString()), columnR(16, b.AllocsOpString()))
-}
-
-// CSV returns the benchmark results as []string.
-func (b Bench) CSV() []string {
-	return []string{b.NsOpString(), b.BytesOpString(), b.AllocsOpString()}
 }
 
 // Result holds information about a benchmark's results.
@@ -494,32 +775,6 @@ func RandBool() bool {
 	return true
 }
 
-// columnR returns a right justified string of width w.
-func columnR(w int, s string) string {
-	pad := w - len(s)
-	if pad < 0 {
-		pad = 2
-	}
-	padding := make([]byte, pad)
-	for i := 0; i < pad; i++ {
-		padding[i] = 0x20
-	}
-	return fmt.Sprintf("%s%s", string(padding), s)
-}
-
-// columnL returns a left justified string of width w.
-func columnL(w int, s string) string {
-	pad := w - len(s)
-	if pad < 0 {
-		pad = 2
-	}
-	padding := make([]byte, pad)
-	for i := 0; i < pad; i++ {
-		padding[i] = 0x20
-	}
-	return fmt.Sprintf("%s%s", s, string(padding))
-}
-
 // Dot prints a . every second to os.StdOut.
 func Dot(done chan struct{}) {
 	var i int
@@ -571,7 +826,7 @@ func csvOut(w *csv.Writer, benches Benches) error {
 	}
 	// set it so that the first section doesn't get an extraneous line break.
 	priorGroup := benches.Benchmarks[0].Group
-	for _, v := range benches.Benchmarks {
+	for i, v := range benches.Benchmarks {
 		if v.Group != priorGroup && benches.sectionPerGroup {
 			err := w.Write(empty)
 			if err != nil {
@@ -584,7 +839,7 @@ func csvOut(w *csv.Writer, benches Benches) error {
 				}
 			}
 		}
-		err := w.Write(v.csv(benches.length))
+		err := w.Write(benches.csv(i))
 		if err != nil {
 			return err
 		}
