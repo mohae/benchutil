@@ -503,7 +503,6 @@ func (b *StringBench) WriteResults() {
 	priorGroup := b.Benchmarks[0].Group
 	for i, bench := range b.Benchmarks {
 		buf.Reset()
-
 		if b.sectionPerGroup && bench.Group != priorGroup {
 			buf.WriteRune('\n')
 		}
@@ -519,7 +518,7 @@ func (b *StringBench) WriteResults() {
 			buf.WriteString(b.columnL(b.length.Name, bench.Name))
 		}
 		if b.length.Desc > 0 {
-			buf.WriteString(b.columnL(b.length.Desc, b.Desc))
+			buf.WriteString(b.columnL(b.length.Desc, bench.Desc))
 		}
 		buf.WriteString(b.BenchString(i))
 		if b.length.Note > 0 {
