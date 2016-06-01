@@ -239,8 +239,8 @@ func (b *Benches) setLength() {
 			b.length.Note = len(v.Note)
 		}
 		// result
-		if len(strconv.Itoa(int(v.Result.Ops))) > b.length.Ops {
-			b.length.Ops = len(strconv.Itoa(int(v.Result.Ops)))
+		if len(strconv.Itoa(int(v.Result.Ops)*v.Iterations)) > b.length.Ops {
+			b.length.Ops = len(strconv.Itoa(int(v.Result.Ops) * v.Iterations))
 		}
 		// if each result represents more than 1 iteration; store the
 		// benches value if it's greater than the current value.
@@ -297,9 +297,9 @@ func (b *Benches) setLength() {
 // string.
 func (b *Benches) OpsString(v Bench) string {
 	if b.includeOpsColumnDesc {
-		return fmt.Sprintf("%s ops", b.perOpsString(v.Ops, v.Iterations))
+		return fmt.Sprintf("%d ops", v.Ops*int64(v.Iterations))
 	}
-	return b.perOpsString(v.Ops, v.Iterations)
+	return fmt.Sprintf("%d", v.Ops*int64(v.Iterations))
 }
 
 // NsOpString returns the nanoseconds each operation took as a formatted
@@ -334,7 +334,7 @@ func (b *Benches) perOpsString(v int64, it int) string {
 	if v == 0 {
 		return "0"
 	}
-	return strconv.FormatInt(v/int64(it), 10)
+	return fmt.Sprintf("%d", v/int64(it))
 }
 
 // columnR returns a right justified string of width w.
@@ -387,7 +387,6 @@ func (b Benches) csv(i int) []string {
 	if b.length.Desc > 0 {
 		s = append(s, b.Benchmarks[i].Desc)
 	}
-	fmt.Println(b.resultCSV(i))
 	s = append(s, b.resultCSV(i)...)
 	if b.length.Note > 0 {
 		s = append(s, b.Benchmarks[i].Note)
