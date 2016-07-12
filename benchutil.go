@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -31,10 +30,10 @@ import (
 
 const defaultPadding = 2
 
-var Rand pcg.Rand
+var prng pcg.Rand
 
 func init() {
-	Rand.Seed(Seed())
+	prng.Seed(NewSeed())
 }
 
 type Benchmarker interface {
@@ -55,6 +54,7 @@ type Benchmarker interface {
 	SetColumnPadding(i int)
 	SectionPerGroup(bool)
 	SectionHeaders(bool)
+	NameSections(bool)
 }
 
 type header struct {
@@ -131,6 +131,7 @@ type Benches struct {
 	includeSystemInfo    bool // Add basic system info to the output
 	sectionPerGroup      bool // make a section for each group
 	sectionHeaders       bool // if each section should have it's own col headers, when applicable
+	nameSections         bool // Use the group name as the section name when there are sections.
 	length
 }
 
@@ -211,6 +212,11 @@ func (b *Benches) SectionPerGroup(v bool) {
 // Sets the sectionHeaders bool.  Txt output ignores this.
 func (b *Benches) SectionHeaders(v bool) {
 	b.sectionHeaders = v
+}
+
+// Sets the nameSections bool.  Txt output ignores this.
+func (b *Benches) NameSections(v bool) {
+	b.nameSections = v
 }
 
 // Sets the number of spaces between columns; default is 2.
@@ -739,8 +745,8 @@ const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
 
 var alen = uint32(len(alphanum))
 
-// Seed gets a random int64 to use for a seed value
-func Seed() int64 {
+// NewSeed gets a random int64 to use for a seed value
+func NewSeed() int64 {
 	bi := big.NewInt(1<<63 - 1)
 	r, err := crand.Int(crand.Reader, bi)
 	if err != nil {
@@ -760,14 +766,14 @@ func RandString(l uint32) string {
 func RandBytes(l uint32) []byte {
 	b := make([]byte, l)
 	for i := 0; i < int(l); i++ {
-		b[i] = alphanum[int(Rand.Bound(alen))]
+		b[i] = alphanum[int(prng.Bound(alen))]
 	}
 	return b
 }
 
 // RandBool returns a pseudo-random bool value.
 func RandBool() bool {
-	if rand.Int31()%2 == 0 {
+	if prng.Int63()%2 == 0 {
 		return false
 	}
 	return true
