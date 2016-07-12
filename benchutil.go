@@ -36,6 +36,8 @@ func init() {
 	prng.Seed(NewSeed())
 }
 
+// Benchmarker defines common behavior for a Benchmark output harness; format
+// specific methods may be
 type Benchmarker interface {
 	Append(...Bench)
 	Out() error
@@ -71,60 +73,77 @@ type header struct {
 
 func newHeader() header {
 	return header{
-		Group:    "group",
-		SubGroup: "sub-group",
-		Name:     "name",
-		Desc:     "desc",
-		Ops:      "ops",
-		NsOp:     "ns/op",
-		BytesOp:  "b/op",
-		AllocsOp: "allocs/op",
-		Note:     "note",
+		Group:    "Group",
+		SubGroup: "Sub-Group",
+		Name:     "Name",
+		Desc:     "Desc",
+		Ops:      "Ops",
+		NsOp:     "ns/Op",
+		BytesOp:  "B/Op",
+		AllocsOp: "Allocs/Op",
+		Note:     "Note",
 	}
 }
 
+// SetGroupColumnHeader sets the Group column header; default is 'Group'.
+// This only applies when Group is part of the output.
 func (h *header) SetGroupColumnHeader(s string) {
 	h.Group = s
 }
 
+// SetSubGroupColumnHeader sets the SubGroup column header; default is
+// 'Sub-Group'.  This only applies when SubGroup is part of the output.
 func (h *header) SetSubGroupColumnHeader(s string) {
 	h.SubGroup = s
 }
 
+// SetNameColumnHeader sets the Name column header; default is 'Name'.
 func (h *header) SetNameColumnHeader(s string) {
 	h.Name = s
 }
 
+// SetDescColumnHeader sets the Desc column header; default is 'Desc'.  This
+// only applies when Desc is part of the output.
 func (h *header) SetDescColumnHeader(s string) {
 	h.Desc = s
 }
 
+// SetOpsColumnHeader sets the Ops column header; default is 'Ops'.  This only
+// applies when Ops is part of the output.
 func (h *header) SetOpsColumnHeader(s string) {
 	h.Ops = s
 }
 
+// SetNsOpColumnHeader sets the NsOp column header; default is 'ns/Op'.  This
+// only applies when NsOp is part of the output.
 func (h *header) SetNsOpColumnHeader(s string) {
 	h.NsOp = s
 }
 
+// SetBytesOpColumnHeader sets the BytesOp column header; default is 'B/Op'.
+// This only applies when BytesOp is part of the output.
 func (h *header) SetBytesOpColumnHeader(s string) {
 	h.BytesOp = s
 }
 
+// SetAllocsOpColumnHeader sets the AllocsOp column header; default is
+// 'Allocs/Op'.  This only applies when AllocsOp is part of the output.
 func (h *header) SetAllocsOpColumnHeader(s string) {
 	h.AllocsOp = s
 }
 
+// SetNoteColumnHeader sets the Note column header; default is 'Note'.  This
+// only applies when Note is part of the output.
 func (h *header) SetNoteColumnHeader(s string) {
 	h.Note = s
 }
 
 // Benches is a collection of benchmark informtion and their results.
 type Benches struct {
-	Name       string // Name of the set; optional.
-	Desc       string // Description of the collection of benchmarks; optional.
-	Note       string // Additional notes about the set; optional.
-	Benchmarks []Bench
+	Name       string  // Name of the set; optional.
+	Desc       string  // Description of the collection of benchmarks; optional.
+	Note       string  // Additional notes about the set; optional.
+	Benchmarks []Bench // The benchmark results
 	header
 	columnPadding        int  // The number of spaces between columns.
 	includeOpsColumnDesc bool // Include the description of the ops info in each column's result output.
@@ -135,6 +154,7 @@ type Benches struct {
 	length
 }
 
+// SystemInfo generates the System Information string.
 func (b *Benches) SystemInfo() (string, error) {
 	inf, err := facts.Get()
 	if err != nil {
@@ -448,6 +468,7 @@ func (b *StringBench) Out() error {
 	return nil
 }
 
+// WriteHeader writes the table header to the writer.
 func (b *StringBench) WriteHeader() {
 	var buf bytes.Buffer
 	if b.length.Group > 0 {
@@ -472,6 +493,7 @@ func (b *StringBench) WriteHeader() {
 	fmt.Fprintln(b.w, buf.String())
 }
 
+// WriteSeparatorLine writes a line consisting of dashes to the writer.
 func (b *StringBench) WriteSeparatorLine() {
 	var buf bytes.Buffer
 	var l int
@@ -499,10 +521,7 @@ func (b *StringBench) WriteSeparatorLine() {
 	fmt.Fprintln(b.w, buf.String())
 }
 
-// WriteResults returns the benchmark information as a slice of strings.
-//
-// The args exist to ensure consistency in the output layout as what is
-// true for this bench may not be true for all benches in the set.
+// WriteResults writes the benchmark results to the writer.
 func (b *StringBench) WriteResults() {
 	var buf bytes.Buffer
 	priorGroup := b.Benchmarks[0].Group
@@ -533,6 +552,8 @@ func (b *StringBench) WriteResults() {
 	}
 }
 
+// BenchString generates the Ops, ns/Ops, B/Ops, and Allocs/Op string for a
+// given benchmark result.
 func (b *StringBench) BenchString(i int) string {
 	return fmt.Sprintf("%s%s%s%s", b.columnR(b.length.Ops, b.OpsString(b.Benchmarks[i])), b.columnR(b.length.NsOp, b.NsOpString(b.Benchmarks[i])), b.columnR(b.length.BytesOp, b.BytesOpString(b.Benchmarks[i])), b.columnR(b.length.AllocsOp, b.AllocsOpString(b.Benchmarks[i])))
 }
@@ -680,6 +701,9 @@ func (b *MDBench) Out() error {
 	return t.MDTable()
 }
 
+// SectionName writes out the name of a new section using the Group as the
+// name.  This is only applicable when output is being split up into Groups
+// and when the sections are to be named.  By default sections are not named.
 func (b *MDBench) SectionName(s string) error {
 	// see if SectionName is being used.
 	if !b.GroupAsSectionName || !b.sectionPerGroup || !b.sectionHeaders {
@@ -745,7 +769,7 @@ const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
 
 var alen = uint32(len(alphanum))
 
-// NewSeed gets a random int64 to use for a seed value
+// NewSeed gets a random int64 to use for a seed value.
 func NewSeed() int64 {
 	bi := big.NewInt(1<<63 - 1)
 	r, err := crand.Int(crand.Reader, bi)
