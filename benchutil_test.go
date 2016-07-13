@@ -19,6 +19,19 @@ func TestSystemInfo(t *testing.T) {
 	t.Logf(s)
 }
 
+func TestDetailedSystemInfo(t *testing.T) {
+	b := Benches{}
+	s, err := b.DetailedSystemInfo()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+		return
+	}
+	if s == "" {
+		t.Error("got empty string; want a non-empty string")
+	}
+	t.Logf(s)
+
+}
 func TestAppend(t *testing.T) {
 	b := Benches{}
 	bench := Bench{}

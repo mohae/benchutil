@@ -56,6 +56,7 @@ type Benchmarker interface {
 	SetColumnPadding(i int)
 	SectionPerGroup(bool)
 	SectionHeaders(bool)
+	DetailedSystemInfo(bool)
 	NameSections(bool)
 }
 
@@ -148,14 +149,16 @@ type Benches struct {
 	columnPadding        int  // The number of spaces between columns.
 	includeOpsColumnDesc bool // Include the description of the ops info in each column's result output.
 	includeSystemInfo    bool // Add basic system info to the output
+	detailedSystemInfo   bool // SystemInfo output uses DetailedSystemInfo.
 	sectionPerGroup      bool // make a section for each group
 	sectionHeaders       bool // if each section should have it's own col headers, when applicable
 	nameSections         bool // Use the group name as the section name when there are sections.
 	length
 }
 
-// SystemInfo generates the System Information string.
-func (b *Benches) SystemInfo() (string, error) {
+// DetailedSystemInfo generates the System Information string, including
+// information about every CPU core on the system.
+func (b *Benches) DetailedSystemInfo() (string, error) {
 	inf, err := facts.Get()
 	if err != nil {
 		return "", err
@@ -187,6 +190,55 @@ func (b *Benches) SystemInfo() (string, error) {
 		buff.WriteString(v.CacheSize)
 		buff.WriteRune('\n')
 	}
+	buff.WriteString("Memory:     ")
+	buff.WriteString(human.Bytes(m.MemTotal))
+	buff.WriteRune('\n')
+	// release info
+	info := r.PrettyName
+	if info == "" {
+		info = r.Version
+		if info == "" {
+			info = r.VersionID
+		}
+	}
+	buff.WriteString(fmt.Sprintf("OS:         %s %s\n", strings.Title(r.ID), info))
+	// kernel info
+	if k.Version != "" {
+		buff.WriteString(fmt.Sprintf("Kernel:     %s\n", k.Version))
+		buff.WriteRune('\n')
+	}
+	return buff.String(), nil
+}
+
+// SystemInfo generates a System Information string.
+func (b *Benches) SystemInfo() (string, error) {
+	inf, err := facts.Get()
+	if err != nil {
+		return "", err
+	}
+	k, err := kernel.Get()
+	if err != nil {
+		return "", err
+	}
+	r, err := release.Get()
+	if err != nil {
+		return "", err
+	}
+
+	m, err := mem.Get()
+	if err != nil {
+		return "", err
+	}
+	var buff bytes.Buffer
+
+	buff.WriteString(fmt.Sprintf("Processors:  %d\n", len(inf.CPU)))
+	buff.WriteString("Model:      ")
+	buff.WriteString(inf.CPU[0].ModelName)
+	buff.WriteRune('\n')
+	buff.WriteString(fmt.Sprintf("CPU MHz:    %7.2f\n", inf.CPU[0].CPUMHz))
+	buff.WriteString("Cache:      ")
+	buff.WriteString(inf.CPU[0].CacheSize)
+	buff.WriteRune('\n')
 	buff.WriteString("Memory:     ")
 	buff.WriteString(human.Bytes(m.MemTotal))
 	buff.WriteRune('\n')
@@ -448,9 +500,19 @@ func (b *StringBench) Out() error {
 	}
 	// If systeminfo is included, include it.
 	if b.includeSystemInfo {
-		inf, err := b.SystemInfo()
-		if err != nil {
-			return err
+		var inf string
+		var err error
+		if b.detailedSystemInfo {
+			inf, err = b.SystemInfo()
+			if err != nil {
+				return err
+			}
+		} else {
+			inf, err = b.SystemInfo()
+			if err != nil {
+				return err
+			}
+
 		}
 		fmt.Fprintln(b.w, inf)
 	}
@@ -606,9 +668,19 @@ func NewMDBench(w io.Writer) *MDBench {
 func (b *MDBench) Out() error {
 	// If systeminfo is included, include it.
 	if b.includeSystemInfo {
-		inf, err := b.SystemInfo()
-		if err != nil {
-			return err
+		var inf string
+		var err error
+		if b.detailedSystemInfo {
+			inf, err = b.SystemInfo()
+			if err != nil {
+				return err
+			}
+		} else {
+			inf, err = b.SystemInfo()
+			if err != nil {
+				return err
+			}
+
 		}
 		fmt.Fprintln(b.w, inf)
 	}
