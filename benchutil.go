@@ -43,7 +43,9 @@ type Benchmarker interface {
 	Out() error
 	IncludeOpsColumnDesc(bool)
 	IncludeSystemInfo(bool)
+	DetailedSystemInfoOutput(bool)
 	SystemInfo() (string, error)
+	DetailedSystemInfo() (string, error)
 	SetGroupColumnHeader(s string)
 	SetSubGroupColumnHeader(s string)
 	SetNameColumnHeader(s string)
@@ -56,7 +58,6 @@ type Benchmarker interface {
 	SetColumnPadding(i int)
 	SectionPerGroup(bool)
 	SectionHeaders(bool)
-	DetailedSystemInfo(bool)
 	NameSections(bool)
 }
 
@@ -274,6 +275,12 @@ func (b *Benches) IncludeOpsColumnDesc(v bool) {
 // benchmarker's output.
 func (b *Benches) IncludeSystemInfo(v bool) {
 	b.includeSystemInfo = v
+}
+
+// DetailedSystemInfoOutput: if true, detailed system info will be included in
+// the benchmarker's output.
+func (b *Benches) DetailedSystemInfoOutput(v bool) {
+	b.detailedSystemInfo = v
 }
 
 // Sets the sectionPerGroup bool
