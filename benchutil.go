@@ -43,7 +43,7 @@ type Benchmarker interface {
 	Out() error
 	IncludeOpsColumnDesc(bool)
 	IncludeSystemInfo(bool)
-	DetailedSystemInfoOutput(bool)
+	IncludeDetailedSystemInfo(bool)
 	SystemInfo() (string, error)
 	DetailedSystemInfo() (string, error)
 	SetGroupColumnHeader(s string)
@@ -147,13 +147,13 @@ type Benches struct {
 	Note       string  // Additional notes about the set; optional.
 	Benchmarks []Bench // The benchmark results
 	header
-	columnPadding        int  // The number of spaces between columns.
-	includeOpsColumnDesc bool // Include the description of the ops info in each column's result output.
-	includeSystemInfo    bool // Add basic system info to the output
-	detailedSystemInfo   bool // SystemInfo output uses DetailedSystemInfo.
-	sectionPerGroup      bool // make a section for each group
-	sectionHeaders       bool // if each section should have it's own col headers, when applicable
-	nameSections         bool // Use the group name as the section name when there are sections.
+	columnPadding             int  // The number of spaces between columns.
+	includeOpsColumnDesc      bool // Include the description of the ops info in each column's result output.
+	includeSystemInfo         bool // Add basic system info to the output
+	includeDetailedSystemInfo bool // SystemInfo output uses DetailedSystemInfo.
+	sectionPerGroup           bool // make a section for each group
+	sectionHeaders            bool // if each section should have it's own col headers, when applicable
+	nameSections              bool // Use the group name as the section name when there are sections.
 	length
 }
 
@@ -272,15 +272,19 @@ func (b *Benches) IncludeOpsColumnDesc(v bool) {
 }
 
 // IncludeSystemInfo: if true, basic system info will be included in the
-// benchmarker's output.
+// benchmarker's output.  If both IncludeSystemInfo and
+// IncludeDetailedSystemInfo are set to true, the detailed system info will
+// be included.
 func (b *Benches) IncludeSystemInfo(v bool) {
 	b.includeSystemInfo = v
 }
 
 // DetailedSystemInfoOutput: if true, detailed system info will be included in
-// the benchmarker's output.
-func (b *Benches) DetailedSystemInfoOutput(v bool) {
-	b.detailedSystemInfo = v
+// the benchmarker's output.  If both IncludeSystemInfo and
+// IncludeDetailedSystemInfo are set to true, the detailed system info will
+// be included.
+func (b *Benches) IncludeDetailedSystemInfo(v bool) {
+	b.includeDetailedSystemInfo = v
 }
 
 // Sets the sectionPerGroup bool
@@ -506,23 +510,22 @@ func (b *StringBench) Out() error {
 		fmt.Fprintln(b.w, b.Name)
 	}
 	// If systeminfo is included, include it.
+	if b.includeDetailedSystemInfo {
+		inf, err := b.SystemInfo()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(b.w, inf)
+		goto writeTable
+	}
 	if b.includeSystemInfo {
-		var inf string
-		var err error
-		if b.detailedSystemInfo {
-			inf, err = b.SystemInfo()
-			if err != nil {
-				return err
-			}
-		} else {
-			inf, err = b.SystemInfo()
-			if err != nil {
-				return err
-			}
-
+		inf, err := b.SystemInfo()
+		if err != nil {
+			return err
 		}
 		fmt.Fprintln(b.w, inf)
 	}
+writeTable:
 
 	// Write the headers
 	b.WriteHeader()
@@ -674,24 +677,23 @@ func NewMDBench(w io.Writer) *MDBench {
 // Out writes the benchmark results to the writer as a Markdown Table.
 func (b *MDBench) Out() error {
 	// If systeminfo is included, include it.
+	if b.includeDetailedSystemInfo {
+		inf, err := b.SystemInfo()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(b.w, inf)
+		goto output
+	}
 	if b.includeSystemInfo {
-		var inf string
-		var err error
-		if b.detailedSystemInfo {
-			inf, err = b.SystemInfo()
-			if err != nil {
-				return err
-			}
-		} else {
-			inf, err = b.SystemInfo()
-			if err != nil {
-				return err
-			}
-
+		inf, err := b.SystemInfo()
+		if err != nil {
+			return err
 		}
 		fmt.Fprintln(b.w, inf)
 	}
 
+output:
 	b.setLength()
 	// Each section may end up as it's own table so we really have a slice
 	// of csv, e.g. [][][]string
