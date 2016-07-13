@@ -192,7 +192,7 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 		buff.WriteRune('\n')
 	}
 	buff.WriteString("Memory:     ")
-	buff.WriteString(human.Bytes(m.MemTotal))
+	buff.WriteString(human.Bytes(m.MemTotal * 1024))
 	buff.WriteRune('\n')
 	// release info
 	info := r.PrettyName
@@ -233,15 +233,15 @@ func (b *Benches) SystemInfo() (string, error) {
 	var buff bytes.Buffer
 
 	buff.WriteString(fmt.Sprintf("Processors:  %d\n", len(inf.CPU)))
-	buff.WriteString("Model:      ")
+	buff.WriteString("Model:       ")
 	buff.WriteString(inf.CPU[0].ModelName)
 	buff.WriteRune('\n')
-	buff.WriteString(fmt.Sprintf("CPU MHz:    %7.2f\n", inf.CPU[0].CPUMHz))
-	buff.WriteString("Cache:      ")
+	buff.WriteString(fmt.Sprintf("CPU MHz:     %7.2f\n", inf.CPU[0].CPUMHz))
+	buff.WriteString("Cache:       ")
 	buff.WriteString(inf.CPU[0].CacheSize)
 	buff.WriteRune('\n')
-	buff.WriteString("Memory:     ")
-	buff.WriteString(human.Bytes(m.MemTotal))
+	buff.WriteString("Memory:      ")
+	buff.WriteString(human.Bytes(m.MemTotal * 1024))
 	buff.WriteRune('\n')
 	// release info
 	info := r.PrettyName
@@ -251,10 +251,10 @@ func (b *Benches) SystemInfo() (string, error) {
 			info = r.VersionID
 		}
 	}
-	buff.WriteString(fmt.Sprintf("OS:         %s %s\n", strings.Title(r.ID), info))
+	buff.WriteString(fmt.Sprintf("OS:          %s %s\n", strings.Title(r.ID), info))
 	// kernel info
 	if k.Version != "" {
-		buff.WriteString(fmt.Sprintf("Kernel:     %s\n", k.Version))
+		buff.WriteString(fmt.Sprintf("Kernel:      %s\n", k.Version))
 		buff.WriteRune('\n')
 	}
 	return buff.String(), nil
