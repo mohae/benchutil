@@ -25,7 +25,6 @@ import (
 	"github.com/mohae/joefriday/mem"
 	"github.com/mohae/joefriday/platform/kernel"
 	"github.com/mohae/joefriday/platform/release"
-	//"github.com/mohae/joefriday/sysinfo/mem"
 )
 
 const defaultPadding = 2
@@ -172,10 +171,6 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	/* TODO value returned by sysinfo is > actual system mem, why?
-	var m mem.Info
-	err = m.Get()
-	*/
 	m, err := mem.Get()
 	if err != nil {
 		return "", err
@@ -192,7 +187,7 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 		buff.WriteRune('\n')
 	}
 	buff.WriteString("Memory:     ")
-	buff.WriteString(human.Bytes(m.MemTotal * 1024))
+	buff.WriteString(human.Bytes(m.MemTotal * 1000))
 	buff.WriteRune('\n')
 	// release info
 	info := r.PrettyName
@@ -225,7 +220,6 @@ func (b *Benches) SystemInfo() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	m, err := mem.Get()
 	if err != nil {
 		return "", err
@@ -241,7 +235,7 @@ func (b *Benches) SystemInfo() (string, error) {
 	buff.WriteString(inf.CPU[0].CacheSize)
 	buff.WriteRune('\n')
 	buff.WriteString("Memory:      ")
-	buff.WriteString(human.Bytes(m.MemTotal * 1024))
+	buff.WriteString(human.Bytes(m.MemTotal * 1000))
 	buff.WriteRune('\n')
 	// release info
 	info := r.PrettyName
