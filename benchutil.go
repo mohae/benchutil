@@ -503,7 +503,7 @@ func (b *StringBench) Out() error {
 	if len(b.Desc) > 0 {
 		fmt.Fprintln(b.w, b.Name)
 	}
-	// If systeminfo is included, include it.
+	// Write the detailed system info; if applicable.
 	if b.includeDetailedSystemInfo {
 		inf, err := b.SystemInfo()
 		if err != nil {
@@ -512,6 +512,7 @@ func (b *StringBench) Out() error {
 		fmt.Fprintln(b.w, inf)
 		goto writeTable
 	}
+	// Write the system info; if applicable.
 	if b.includeSystemInfo {
 		inf, err := b.SystemInfo()
 		if err != nil {
