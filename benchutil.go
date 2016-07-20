@@ -652,9 +652,8 @@ func (b *CSVBench) Out() error {
 // formatted as a table.
 type MDBench struct {
 	Benches
-	w                  io.Writer
-	GroupAsSectionName bool
-	SectionHeaderHash  string // the markdown header hash for section names, when applicable
+	w                 io.Writer
+	SectionHeaderHash string // the markdown header hash for section names, when applicable
 }
 
 func NewMDBench(w io.Writer) *MDBench {
@@ -670,7 +669,7 @@ func NewMDBench(w io.Writer) *MDBench {
 
 // Out writes the benchmark results to the writer as a Markdown Table.
 func (b *MDBench) Out() error {
-	// If systeminfo is included, include it.
+	// Write the detailed system info; if applicable.
 	if b.includeDetailedSystemInfo {
 		inf, err := b.SystemInfo()
 		if err != nil {
@@ -679,6 +678,7 @@ func (b *MDBench) Out() error {
 		fmt.Fprintln(b.w, inf)
 		goto output
 	}
+	// Write the system info; if applicable.
 	if b.includeSystemInfo {
 		inf, err := b.SystemInfo()
 		if err != nil {
@@ -695,7 +695,7 @@ output:
 	var hdr, align []string
 	// Don't add a group column if groups aren't used or if the group is used as section name
 	// and output is being split into sections.
-	if b.length.Group > 0 && !b.sectionPerGroup && !b.sectionHeaders && !b.GroupAsSectionName {
+	if b.length.Group > 0 && !b.nameSection() {
 		align = append(align, "l")
 		hdr = append(hdr, b.header.Group)
 	}
@@ -721,33 +721,47 @@ output:
 	// get a csv writer
 	var buff bytes.Buffer // holds the generated CSV
 	w := csv.NewWriter(&buff)
-	// Generate the CSV:
+	// CSV to Markdown table transmogrifier:
 	t := csv2md.NewTransmogrifier(&buff, b.w)
+
+	// Configure the transmogrifier.
+	// The header isn't part of the data; it's set explicitly.
 	t.HasHeaderRecord = false
-	t.SetFieldAlignment(align)
 	t.SetFieldNames(hdr)
-	priorGroup := b.Benchmarks[0].Group
-	// SectionName figures out if it should be written
-	err := b.SectionName(priorGroup)
-	if err != nil {
-		return err
+	t.SetFieldAlignment(align)
+	var priorGroup string
+	if b.sectionHeaders {
+		priorGroup = b.Benchmarks[0].Group
 	}
 	for i, v := range b.Benchmarks {
 		if priorGroup != v.Group && b.sectionPerGroup {
 			// if each section doesn't get it's own header row, just add an
 			// empty row instead of creating a new table
 			if !b.sectionHeaders {
-				if b.GroupAsSectionName {
-					empty[0] = priorGroup
+				// If there aren't section headers but sections are named,
+				// make the first cell of the empty row the name.
+				if b.nameSection() {
+					empty[0] = b.SectionName(v.Group)
 				}
-				err = w.Write(empty)
+				if i > 0 || !b.sectionHeaders {
+					err := w.Write(empty)
+					if err != nil {
+						return err
+					}
+				}
+				goto process
+			}
+			// If the sections are being named and there are section headers,
+			// the section name is a MD header.
+			if b.nameSection() {
+				_, err := b.w.Write([]byte(b.SectionName(priorGroup)))
 				if err != nil {
 					return err
 				}
 			}
 			// Get a markdown table transmogrifier and configure
 			w.Flush()
-			err = t.MDTable()
+			err := t.MDTable()
 			if err != nil {
 				return err
 			}
@@ -756,42 +770,59 @@ output:
 				return err
 			}
 			buff.Reset()
-			// SectionName figures out if it should be written
-			err = b.SectionName(v.Group)
-			if err != nil {
-				return err
-			}
 		}
+	process:
 		line := b.csv(i)
-		if b.sectionPerGroup && b.sectionHeaders && b.GroupAsSectionName {
+		if b.nameSection() {
+			//fmt.Printf("%#v\n", line)
 			line = line[1:]
+			//fmt.Printf("%#v\n", line)
 		}
-		err = w.Write(line)
+		err := w.Write(line)
 		if err != nil {
 			return err
 		}
 		priorGroup = v.Group
 	}
+	// if each section doesn't get it's own header row, just add an
+	// empty row instead of creating a new table
+	if !b.sectionHeaders {
+		goto finish
+	}
+	// If the sections are being named and there are section headers,
+	// the section name is a MD header.
+	if b.nameSection() {
+		_, err := b.w.Write([]byte(b.SectionName(priorGroup)))
+		if err != nil {
+			return err
+		}
+	}
+finish:
 	w.Flush()
 	return t.MDTable()
 }
 
-// SectionName writes out the name of a new section using the Group as the
-// name.  This is only applicable when output is being split up into Groups
-// and when the sections are to be named.  By default sections are not named.
-func (b *MDBench) SectionName(s string) error {
-	// see if SectionName is being used.
-	if !b.GroupAsSectionName || !b.sectionPerGroup || !b.sectionHeaders {
-		return nil
+// Whether or not the section should be named
+func (b *MDBench) nameSection() bool {
+	// If sections aren't being used; it's always false.
+	if !b.sectionPerGroup {
+		return false
 	}
-	// If output is in sections and Group is being used as section name;
-	// write out the current group
-	_, err := b.w.Write([]byte(b.SectionHeaderHash + s + "  "))
-	if err != nil {
-		return err
+	return b.nameSections
+}
+
+// SectionName generates the section name; if applicable.
+func (b *MDBench) SectionName(s string) string {
+	// see if SectionName is being used, if not return empty string.
+	if !b.nameSection() {
+		return ""
 	}
-	_, err = b.w.Write([]byte{'\n'})
-	return err
+	// If there are sectionHeaders the section name is a header.
+	if b.sectionHeaders {
+		return b.SectionHeaderHash + " " + s + "  \n"
+	}
+	// The section name is part of the row, in bold
+	return "__" + s + "__"
 }
 
 type length struct {
