@@ -21,10 +21,10 @@ import (
 	pcg "github.com/dgryski/go-pcgr"
 	human "github.com/dustin/go-humanize"
 	"github.com/mohae/csv2md"
-	"github.com/mohae/joefriday/cpu/facts"
-	"github.com/mohae/joefriday/mem"
-	"github.com/mohae/joefriday/platform/kernel"
-	"github.com/mohae/joefriday/platform/release"
+	"github.com/mohae/joefriday/cpu/cpuinfo"
+	"github.com/mohae/joefriday/mem/membasic"
+	"github.com/mohae/joefriday/system/version"
+	"github.com/mohae/joefriday/system/release"
 )
 
 const defaultPadding = 2
@@ -159,11 +159,11 @@ type Benches struct {
 // DetailedSystemInfo generates the System Information string, including
 // information about every CPU core on the system.
 func (b *Benches) DetailedSystemInfo() (string, error) {
-	inf, err := facts.Get()
+	inf, err := cpuinfo.Get()
 	if err != nil {
 		return "", err
 	}
-	k, err := kernel.Get()
+	os, err := version.Get()
 	if err != nil {
 		return "", err
 	}
@@ -171,7 +171,7 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	m, err := mem.Get()
+	m, err := membasic.Get()
 	if err != nil {
 		return "", err
 	}
@@ -198,9 +198,9 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 		}
 	}
 	buff.WriteString(fmt.Sprintf("OS:         %s %s\n", strings.Title(r.ID), info))
-	// kernel info
-	if k.Version != "" {
-		buff.WriteString(fmt.Sprintf("Kernel:     %s\n", k.Version))
+	// OS kernel info
+	if os.Version != "" {
+		buff.WriteString(fmt.Sprintf("Kernel:     %s\n", os.Version))
 		buff.WriteRune('\n')
 	}
 	return buff.String(), nil
@@ -208,11 +208,11 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 
 // SystemInfo generates a System Information string.
 func (b *Benches) SystemInfo() (string, error) {
-	inf, err := facts.Get()
+	inf, err := cpuinfo.Get()
 	if err != nil {
 		return "", err
 	}
-	k, err := kernel.Get()
+	os, err := version.Get()
 	if err != nil {
 		return "", err
 	}
@@ -220,7 +220,7 @@ func (b *Benches) SystemInfo() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	m, err := mem.Get()
+	m, err := membasic.Get()
 	if err != nil {
 		return "", err
 	}
@@ -246,9 +246,9 @@ func (b *Benches) SystemInfo() (string, error) {
 		}
 	}
 	buff.WriteString(fmt.Sprintf("OS:          %s %s\n", strings.Title(r.ID), info))
-	// kernel info
-	if k.Version != "" {
-		buff.WriteString(fmt.Sprintf("Kernel:      %s\n", k.Version))
+	// os kernel info
+	if os.Version != "" {
+		buff.WriteString(fmt.Sprintf("Kernel:      %s\n", os.Version))
 		buff.WriteRune('\n')
 	}
 	return buff.String(), nil
