@@ -24,7 +24,7 @@ import (
 	"github.com/mohae/joefriday/cpu/cpuinfo"
 	"github.com/mohae/joefriday/mem/membasic"
 	"github.com/mohae/joefriday/system/version"
-	"github.com/mohae/joefriday/system/release"
+	release "github.com/mohae/joefriday/system/os"
 )
 
 const defaultPadding = 2
@@ -163,7 +163,7 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	os, err := version.Get()
+	v, err := version.Get()
 	if err != nil {
 		return "", err
 	}
@@ -176,14 +176,14 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 		return "", err
 	}
 	var buff bytes.Buffer
-	for _, v := range inf.CPU {
-		buff.WriteString(fmt.Sprintf("Processor:  %d\n", v.Processor))
+	for _, cpu := range inf.CPU {
+		buff.WriteString(fmt.Sprintf("Processor:  %d\n", cpu.Processor))
 		buff.WriteString("Model:      ")
-		buff.WriteString(v.ModelName)
+		buff.WriteString(cpu.ModelName)
 		buff.WriteRune('\n')
-		buff.WriteString(fmt.Sprintf("CPU MHz:    %7.2f\n", v.CPUMHz))
+		buff.WriteString(fmt.Sprintf("CPU MHz:    %7.2f\n", cpu.CPUMHz))
 		buff.WriteString("Cache:      ")
-		buff.WriteString(v.CacheSize)
+		buff.WriteString(cpu.CacheSize)
 		buff.WriteRune('\n')
 	}
 	buff.WriteString("Memory:     ")
@@ -199,8 +199,8 @@ func (b *Benches) DetailedSystemInfo() (string, error) {
 	}
 	buff.WriteString(fmt.Sprintf("OS:         %s %s\n", strings.Title(r.ID), info))
 	// OS kernel info
-	if os.Version != "" {
-		buff.WriteString(fmt.Sprintf("Kernel:     %s\n", os.Version))
+	if v.Version != "" {
+		buff.WriteString(fmt.Sprintf("Kernel:     %s\n", v.Version))
 		buff.WriteRune('\n')
 	}
 	return buff.String(), nil
@@ -212,7 +212,7 @@ func (b *Benches) SystemInfo() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	os, err := version.Get()
+	v, err := version.Get()
 	if err != nil {
 		return "", err
 	}
@@ -247,8 +247,8 @@ func (b *Benches) SystemInfo() (string, error) {
 	}
 	buff.WriteString(fmt.Sprintf("OS:          %s %s\n", strings.Title(r.ID), info))
 	// os kernel info
-	if os.Version != "" {
-		buff.WriteString(fmt.Sprintf("Kernel:      %s\n", os.Version))
+	if v.Version != "" {
+		buff.WriteString(fmt.Sprintf("Kernel:      %s\n", v.Version))
 		buff.WriteRune('\n')
 	}
 	return buff.String(), nil
